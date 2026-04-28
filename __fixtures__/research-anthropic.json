@@ -1,0 +1,624 @@
+{
+  "company": {
+    "slug": "anthropic",
+    "name": "Anthropic",
+    "domain": "anthropic.com"
+  },
+  "disambiguation": {
+    "canonical_name": "Anthropic",
+    "canonical_domain": "anthropic.com",
+    "one_line_description": "AI safety company building Claude, focused on developing reliable and interpretable AI systems.",
+    "disambiguation_note": null
+  },
+  "sections": {
+    "snapshot": {
+      "content": {
+        "summary": "Anthropic is an AI safety company that builds Claude, a family of large language models designed to be helpful, harmless, and honest. Founded by former OpenAI researchers, the company focuses on developing interpretable AI systems with Constitutional AI as its core alignment methodology.",
+        "tagline": "AI research company building reliable, interpretable AI systems.",
+        "business_model": "B2B",
+        "industry": "Artificial Intelligence / AI Safety",
+        "stage": "Growth",
+        "hq": "San Francisco, CA",
+        "founded_year": 2021,
+        "employee_count_band": "1001-5000",
+        "claims": [
+          {
+            "id": 1,
+            "text": "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and other former OpenAI researchers.",
+            "citation_url": "https://www.anthropic.com/company",
+            "citation_quote": "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and colleagues from OpenAI."
+          },
+          {
+            "id": 2,
+            "text": "Anthropic is headquartered in San Francisco, California.",
+            "citation_url": "https://www.anthropic.com/careers",
+            "citation_quote": "Our headquarters are in San Francisco, with a growing presence in other locations."
+          },
+          {
+            "id": 3,
+            "text": "Anthropic has raised over $7 billion in funding as of early 2024.",
+            "citation_url": "https://techcrunch.com/2024/03/27/anthropic-amazon-investment/",
+            "citation_quote": "Amazon completed its $4 billion investment in Anthropic, bringing the AI startup's total funding to over $7 billion."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://www.anthropic.com/company",
+          "quote": "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and colleagues from OpenAI.",
+          "claim": "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and other former OpenAI researchers.",
+          "status": "resolved"
+        },
+        {
+          "id": 2,
+          "url": "https://www.anthropic.com/careers",
+          "quote": "Our headquarters are in San Francisco, with a growing presence in other locations.",
+          "claim": "Anthropic is headquartered in San Francisco, California.",
+          "status": "resolved"
+        },
+        {
+          "id": 3,
+          "url": "https://techcrunch.com/2024/03/27/anthropic-amazon-investment/",
+          "quote": "Amazon completed its $4 billion investment in Anthropic, bringing the AI startup's total funding to over $7 billion.",
+          "claim": "Anthropic has raised over $7 billion in funding as of early 2024.",
+          "status": "resolved"
+        }
+      ],
+      "model_version": "claude-haiku-4-5"
+    },
+    "moat": {
+      "content": {
+        "moat_types": [
+          "data",
+          "brand",
+          "regulatory"
+        ],
+        "moat_summary": "Anthropic's real moat is the RLHF + Constitutional AI training pipeline and the safety reputation that makes it the default choice for enterprise and government buyers who need to check a compliance box. The model weights themselves depreciate every 6 months.",
+        "compounding_moments": [
+          {
+            "year": 2021,
+            "what_happened": "Founded with 7 senior OpenAI researchers including VP Research.",
+            "why_it_compounded": "Instant credibility with talent and investors. Every safety-focused ML researcher now had a landing spot that wasn't OpenAI, creating a talent gravity well.",
+            "citation_url": null,
+            "inferred": false
+          },
+          {
+            "year": 2022,
+            "what_happened": "Published Constitutional AI paper.",
+            "why_it_compounded": "Gave Anthropic an IP moat in alignment methodology that competitors reference but haven't replicated at scale. Became the cited approach in policy documents.",
+            "citation_url": null,
+            "inferred": false
+          },
+          {
+            "year": 2023,
+            "what_happened": "Claude 2 launched with 100k context window.",
+            "why_it_compounded": "First mover on long-context for enterprise doc processing. Customers built pipelines around the context length, creating switching costs.",
+            "citation_url": null,
+            "inferred": false
+          },
+          {
+            "year": 2024,
+            "what_happened": "Amazon invested $4B and made Claude default on Bedrock.",
+            "why_it_compounded": "Distribution locked in via AWS marketplace. Enterprise buyers on Bedrock default to Claude without evaluating alternatives.",
+            "citation_url": null,
+            "inferred": false
+          }
+        ],
+        "replicability": {
+          "data_score": 6,
+          "network_score": 3,
+          "distribution_score": 7,
+          "regulatory_score": 5,
+          "reasoning": {
+            "data": "RLHF preference data from millions of conversations is genuinely hard to reproduce. But OpenAI and Google have comparable or larger corpuses. The Constitutional AI training recipes are the real differentiator, not raw data volume.",
+            "network": "Minimal network effects. More users don't make Claude better for the next user in any direct way. Indirect data flywheel exists but is table stakes for any frontier lab.",
+            "distribution": "Amazon Bedrock integration is a massive distribution lock-in. Government and enterprise procurement pipelines take 6-12 months to switch. Plus the API compatibility layer means switching costs are real even for startups.",
+            "regulatory": "AI safety reputation gives them a seat at the policy table. When governments regulate AI, Anthropic is consulted. This creates a soft regulatory moat where compliance frameworks are shaped around their approach."
+          },
+          "confidence": {
+            "data": "high",
+            "network": "high",
+            "distribution": "high",
+            "regulatory": "medium"
+          }
+        },
+        "defensible": "The safety brand and enterprise trust. When a Fortune 500 CISO asks 'which AI vendor won't embarrass us,' Anthropic is the answer. That reputation took 3 years of deliberate public positioning and cannot be replicated by shipping a model with a safety system prompt.",
+        "overrated": "The model quality itself. Frontier models converge every 6-12 months. Claude's reasoning edge over GPT-4 in any given month is a temporary lead, not a moat. A well-funded team (Meta, Mistral, xAI) can match capabilities within two training runs.",
+        "attack_vector": "Go vertical on a single enterprise workflow. Anthropic sells horizontal intelligence. Pick one domain (legal, medical, code review) and build the data flywheel + fine-tuning + evals that Anthropic can't justify for a single vertical. Ship the fine-tuned model on your own infra with latency and cost advantages.",
+        "claims": [
+          {
+            "id": 1,
+            "text": "Anthropic published the Constitutional AI paper in December 2022.",
+            "citation_url": "https://arxiv.org/abs/2212.08073",
+            "citation_quote": "We experiment with methods for training a harmless AI assistant through self-improvement, without any human labels identifying harmful outputs."
+          },
+          {
+            "id": 2,
+            "text": "Amazon completed a $4 billion investment in Anthropic in March 2024.",
+            "citation_url": "https://www.aboutamazon.com/news/company-news/amazon-anthropic-ai-investment",
+            "citation_quote": "Amazon has completed its investment of up to $4 billion in Anthropic."
+          },
+          {
+            "id": 3,
+            "text": "Claude was the first major LLM to offer 100k token context window.",
+            "citation_url": "https://www.anthropic.com/news/100k-context-windows",
+            "citation_quote": "We've expanded Claude's context window to 100,000 tokens."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://arxiv.org/abs/2212.08073",
+          "quote": "We experiment with methods for training a harmless AI assistant through self-improvement, without any human labels identifying harmful outputs.",
+          "claim": "Anthropic published the Constitutional AI paper in December 2022.",
+          "status": "resolved"
+        },
+        {
+          "id": 2,
+          "url": "https://www.aboutamazon.com/news/company-news/amazon-anthropic-ai-investment",
+          "quote": "Amazon has completed its investment of up to $4 billion in Anthropic.",
+          "claim": "Amazon completed a $4 billion investment in Anthropic in March 2024.",
+          "status": "resolved"
+        },
+        {
+          "id": 3,
+          "url": "https://www.anthropic.com/news/100k-context-windows",
+          "quote": "We've expanded Claude's context window to 100,000 tokens.",
+          "claim": "Claude was the first major LLM to offer 100k token context window.",
+          "status": "resolved"
+        }
+      ],
+      "model_version": "claude-opus-4-7"
+    },
+    "founders": {
+      "content": {
+        "founders": [
+          {
+            "name": "Dario Amodei",
+            "role": "CEO",
+            "photo_url": null,
+            "linkedin_url": null,
+            "twitter_url": "https://twitter.com/DarioAmodei",
+            "personal_site": null,
+            "college": "Princeton University (PhD Computational Neuroscience)",
+            "prior_companies": [
+              "OpenAI",
+              "Google Brain",
+              "Baidu AI Lab"
+            ],
+            "technical": true,
+            "what_they_bring": "Deep RL and scaling research credibility; led GPT-2/GPT-3 scaling work at OpenAI.",
+            "full_bio": "Dario Amodei served as VP of Research at OpenAI where he co-led the development of GPT-2 and GPT-3. He holds a PhD in computational neuroscience from Princeton. Before OpenAI he worked at Google Brain and Baidu's AI Lab. He co-founded Anthropic in 2021 with a focus on AI safety research."
+          },
+          {
+            "name": "Daniela Amodei",
+            "role": "President",
+            "photo_url": null,
+            "linkedin_url": "https://www.linkedin.com/in/daniela-amodei-790bb22a/",
+            "twitter_url": null,
+            "personal_site": null,
+            "college": "UC Santa Cruz",
+            "prior_companies": [
+              "OpenAI",
+              "Stripe"
+            ],
+            "technical": false,
+            "what_they_bring": "Operations, policy, and business scaling experience from OpenAI and Stripe.",
+            "full_bio": "Daniela Amodei was VP of Operations at OpenAI, where she oversaw the growth from a small research lab to a major AI company. Before that she spent five years at Stripe working on risk and Atlas. She brings operational discipline and government/policy relationships to Anthropic."
+          }
+        ],
+        "claims": [
+          {
+            "id": 1,
+            "text": "Dario Amodei was VP of Research at OpenAI before co-founding Anthropic.",
+            "citation_url": "https://www.anthropic.com/company",
+            "citation_quote": "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and colleagues from OpenAI."
+          },
+          {
+            "id": 2,
+            "text": "Daniela Amodei previously worked at Stripe and OpenAI.",
+            "citation_url": "https://www.linkedin.com/in/daniela-amodei-790bb22a/",
+            "citation_quote": "VP of Operations at OpenAI. Previously at Stripe."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://www.anthropic.com/company",
+          "quote": "Anthropic was founded in 2021 by Dario Amodei, Daniela Amodei, and colleagues from OpenAI.",
+          "claim": "Dario Amodei was VP of Research at OpenAI before co-founding Anthropic.",
+          "status": "resolved"
+        },
+        {
+          "id": 2,
+          "url": "https://www.linkedin.com/in/daniela-amodei-790bb22a/",
+          "quote": "VP of Operations at OpenAI. Previously at Stripe.",
+          "claim": "Daniela Amodei previously worked at Stripe and OpenAI.",
+          "status": "gated"
+        }
+      ],
+      "model_version": "claude-haiku-4-5"
+    },
+    "tech_stack": {
+      "content": {
+        "current_stack": {
+          "frontend": [
+            "React",
+            "TypeScript",
+            "Next.js"
+          ],
+          "backend": [
+            "Python",
+            "Rust",
+            "Go"
+          ],
+          "database": [
+            "PostgreSQL",
+            "Redis",
+            "Custom vector stores"
+          ],
+          "infra": [
+            "AWS",
+            "GCP",
+            "Custom GPU clusters"
+          ],
+          "vendors": [
+            "Weights & Biases",
+            "GitHub",
+            "Buildkite"
+          ]
+        },
+        "mvp_stack": {
+          "frontend": [
+            "React",
+            "TypeScript"
+          ],
+          "backend": [
+            "Python",
+            "Flask"
+          ],
+          "database": [
+            "PostgreSQL"
+          ],
+          "infra": [
+            "GCP",
+            "TPU pods"
+          ],
+          "vendors": [
+            "Weights & Biases"
+          ]
+        },
+        "mvp_cost_estimate": {
+          "team_low_usd": 5000000,
+          "team_high_usd": 15000000,
+          "infra_low_usd": 10000000,
+          "infra_high_usd": 50000000,
+          "other_low_usd": 500000,
+          "other_high_usd": 2000000,
+          "total_low_usd": 15500000,
+          "total_high_usd": 67000000,
+          "methodology": "Frontier AI lab MVP requires 20-50 senior ML researchers at $300-500k comp + massive GPU/TPU compute for initial training runs. Infra dominates cost. Estimate covers 12 months to first publishable model."
+        },
+        "stack_evolution": "Started on GCP with TPU pods for initial training. Added AWS as primary cloud for inference serving after Amazon investment. Rust adopted for inference optimization and low-latency serving. Custom training infrastructure replaces off-the-shelf ML platforms at scale.",
+        "claims": [
+          {
+            "id": 1,
+            "text": "Anthropic uses custom GPU clusters and has partnerships with both AWS and GCP.",
+            "citation_url": "https://www.anthropic.com/news/anthropic-amazon",
+            "citation_quote": "Anthropic will use Amazon Web Services as its primary cloud provider for mission-critical workloads."
+          },
+          {
+            "id": 2,
+            "text": "Anthropic has invested heavily in custom training infrastructure.",
+            "citation_url": "https://www.anthropic.com/research",
+            "citation_quote": "We build our own training infrastructure to support frontier model development."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://www.anthropic.com/news/anthropic-amazon",
+          "quote": "Anthropic will use Amazon Web Services as its primary cloud provider for mission-critical workloads.",
+          "claim": "Anthropic uses custom GPU clusters and has partnerships with both AWS and GCP.",
+          "status": "resolved"
+        },
+        {
+          "id": 2,
+          "url": "https://www.anthropic.com/research",
+          "quote": "We build our own training infrastructure to support frontier model development.",
+          "claim": "Anthropic has invested heavily in custom training infrastructure.",
+          "status": "resolved"
+        }
+      ],
+      "model_version": "claude-haiku-4-5"
+    },
+    "funding": {
+      "content": {
+        "rounds": [
+          {
+            "round_type": "Series A",
+            "date": "2021-05",
+            "amount_usd": 124000000,
+            "valuation_usd": null,
+            "lead_investors": [
+              "Jaan Tallinn"
+            ],
+            "all_investors": [
+              "Jaan Tallinn",
+              "Dustin Moskovitz",
+              "Eric Schmidt",
+              "James McClave"
+            ]
+          },
+          {
+            "round_type": "Series B",
+            "date": "2022-04",
+            "amount_usd": 580000000,
+            "valuation_usd": null,
+            "lead_investors": [
+              "Spark Capital"
+            ],
+            "all_investors": [
+              "Spark Capital",
+              "Google",
+              "Salesforce Ventures",
+              "Sound Ventures"
+            ]
+          },
+          {
+            "round_type": "Series C",
+            "date": "2023-05",
+            "amount_usd": 450000000,
+            "valuation_usd": 5000000000,
+            "lead_investors": [
+              "Spark Capital"
+            ],
+            "all_investors": [
+              "Spark Capital",
+              "Google",
+              "Salesforce Ventures"
+            ]
+          },
+          {
+            "round_type": "Series D",
+            "date": "2023-09",
+            "amount_usd": 4000000000,
+            "valuation_usd": 20000000000,
+            "lead_investors": [
+              "Amazon"
+            ],
+            "all_investors": [
+              "Amazon"
+            ]
+          },
+          {
+            "round_type": "Series E",
+            "date": "2024-03",
+            "amount_usd": 2750000000,
+            "valuation_usd": 18400000000,
+            "lead_investors": [
+              "Menlo Ventures"
+            ],
+            "all_investors": [
+              "Menlo Ventures",
+              "Google",
+              "Salesforce Ventures",
+              "Spark Capital",
+              "T. Rowe Price"
+            ]
+          }
+        ],
+        "total_raised_usd": 7900000000,
+        "milestones": [
+          {
+            "date": "2021-01",
+            "label": "Anthropic founded by Dario and Daniela Amodei",
+            "kind": "other"
+          },
+          {
+            "date": "2022-12",
+            "label": "Constitutional AI paper published",
+            "kind": "product"
+          },
+          {
+            "date": "2023-03",
+            "label": "Claude 1.0 launched publicly",
+            "kind": "product"
+          },
+          {
+            "date": "2023-07",
+            "label": "Claude 2 with 100k context released",
+            "kind": "product"
+          },
+          {
+            "date": "2024-03",
+            "label": "Claude 3 family (Haiku/Sonnet/Opus) released",
+            "kind": "product"
+          },
+          {
+            "date": "2024-10",
+            "label": "Claude 3.5 Sonnet with computer use launched",
+            "kind": "product"
+          }
+        ],
+        "claims": [
+          {
+            "id": 1,
+            "text": "Anthropic raised $124M in its Series A in May 2021.",
+            "citation_url": "https://www.crunchbase.com/organization/anthropic/company_financials",
+            "citation_quote": "Series A - $124M - May 2021"
+          },
+          {
+            "id": 2,
+            "text": "Amazon invested $4 billion in Anthropic in September 2023.",
+            "citation_url": "https://www.aboutamazon.com/news/company-news/amazon-anthropic-ai-investment",
+            "citation_quote": "Amazon has completed its investment of up to $4 billion in Anthropic."
+          },
+          {
+            "id": 3,
+            "text": "Anthropic raised $2.75B at an $18.4B valuation in early 2024.",
+            "citation_url": "https://techcrunch.com/2024/03/27/anthropic-raises-2-75b-series-e/",
+            "citation_quote": "Anthropic, the AI startup, has raised $2.75 billion in a new funding round at an $18.4 billion valuation."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://www.crunchbase.com/organization/anthropic/company_financials",
+          "quote": "Series A - $124M - May 2021",
+          "claim": "Anthropic raised $124M in its Series A in May 2021.",
+          "status": "gated"
+        },
+        {
+          "id": 2,
+          "url": "https://www.aboutamazon.com/news/company-news/amazon-anthropic-ai-investment",
+          "quote": "Amazon has completed its investment of up to $4 billion in Anthropic.",
+          "claim": "Amazon invested $4 billion in Anthropic in September 2023.",
+          "status": "resolved"
+        },
+        {
+          "id": 3,
+          "url": "https://techcrunch.com/2024/03/27/anthropic-raises-2-75b-series-e/",
+          "quote": "Anthropic, the AI startup, has raised $2.75 billion in a new funding round at an $18.4 billion valuation.",
+          "claim": "Anthropic raised $2.75B at an $18.4B valuation in early 2024.",
+          "status": "resolved"
+        }
+      ],
+      "model_version": "claude-haiku-4-5"
+    },
+    "traction": {
+      "content": {
+        "arr_estimate": {
+          "low_usd": 850000000,
+          "high_usd": 1000000000,
+          "as_of": "2024-12",
+          "confidence": "estimated",
+          "source": "The Information reported Anthropic was on track for $875M+ annualized revenue by end of 2024, driven by API consumption and Claude Pro subscriptions."
+        },
+        "headcount_history": [
+          {
+            "date": "2021-06",
+            "count": 50,
+            "confidence": "estimated"
+          },
+          {
+            "date": "2022-06",
+            "count": 150,
+            "confidence": "estimated"
+          },
+          {
+            "date": "2023-06",
+            "count": 400,
+            "confidence": "estimated"
+          },
+          {
+            "date": "2024-06",
+            "count": 1000,
+            "confidence": "estimated"
+          }
+        ],
+        "web_traffic_trend": "up",
+        "web_traffic_note": "claude.ai traffic grew rapidly through 2024, with Similarweb showing consistent month-over-month increases after Claude 3 launch in March 2024.",
+        "other_signals": [
+          "Claude Pro subscription launched with strong consumer adoption",
+          "API usage growing rapidly among enterprise customers via AWS Bedrock",
+          "Top 5 most-used AI assistant globally by web traffic",
+          "Multiple Fortune 500 enterprise contracts including Bridgewater, BCG, and others"
+        ],
+        "claims": [
+          {
+            "id": 1,
+            "text": "Anthropic was on track for $875M+ in annualized revenue by end of 2024.",
+            "citation_url": "https://www.theinformation.com/articles/anthropic-revenue-2024",
+            "citation_quote": "Anthropic's annualized revenue rate has reached approximately $875 million."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://www.theinformation.com/articles/anthropic-revenue-2024",
+          "quote": "Anthropic's annualized revenue rate has reached approximately $875 million.",
+          "claim": "Anthropic was on track for $875M+ in annualized revenue by end of 2024.",
+          "status": "gated"
+        }
+      ],
+      "model_version": "claude-haiku-4-5"
+    },
+    "market": {
+      "content": {
+        "tam_usd": 300000000000,
+        "sam_usd": 80000000000,
+        "som_usd": 15000000000,
+        "market_size_source": "McKinsey 2024 estimate of the generative AI software market, filtered to enterprise LLM APIs + AI assistant subscriptions.",
+        "market_size_confidence": "analyst",
+        "pioneer_or_follower": "fast_follower",
+        "pioneer_reasoning": "OpenAI launched ChatGPT first and defined the product category. Anthropic followed within months with Claude but differentiated on safety and enterprise trust rather than consumer virality. They were pioneers in the safety-first positioning but fast followers in the product market itself.",
+        "competitors": [
+          {
+            "name": "OpenAI",
+            "domain": "openai.com",
+            "positioning": "Category creator with GPT-4. Strongest consumer brand and broadest product surface (ChatGPT, DALL-E, Codex, API)."
+          },
+          {
+            "name": "Google DeepMind",
+            "domain": "deepmind.google",
+            "positioning": "Vertically integrated with distribution via Search, Workspace, and Cloud. Gemini models closing the gap."
+          },
+          {
+            "name": "Meta AI (LLaMA)",
+            "domain": "ai.meta.com",
+            "positioning": "Open-weight models commoditizing the API layer. Doesn't compete on revenue but compresses margins for everyone."
+          },
+          {
+            "name": "Mistral AI",
+            "domain": "mistral.ai",
+            "positioning": "European champion. Efficient smaller models and open-source credibility. Strong in regulated EU markets."
+          },
+          {
+            "name": "Cohere",
+            "domain": "cohere.com",
+            "positioning": "Enterprise RAG and embeddings focus. Competes on deployment flexibility (on-prem, VPC) rather than frontier capability."
+          }
+        ],
+        "category_growth_rate": "~40% CAGR through 2028",
+        "claims": [
+          {
+            "id": 1,
+            "text": "The generative AI market is projected to reach $300B+ by 2028.",
+            "citation_url": "https://www.mckinsey.com/capabilities/quantumblack/our-insights/the-state-of-ai",
+            "citation_quote": "Generative AI could add the equivalent of $2.6 trillion to $4.4 trillion annually across use cases."
+          },
+          {
+            "id": 2,
+            "text": "OpenAI launched ChatGPT in November 2022, defining the consumer AI assistant category.",
+            "citation_url": "https://openai.com/blog/chatgpt",
+            "citation_quote": "We've trained a model called ChatGPT which interacts in a conversational way."
+          }
+        ]
+      },
+      "citations": [
+        {
+          "id": 1,
+          "url": "https://www.mckinsey.com/capabilities/quantumblack/our-insights/the-state-of-ai",
+          "quote": "Generative AI could add the equivalent of $2.6 trillion to $4.4 trillion annually across use cases.",
+          "claim": "The generative AI market is projected to reach $300B+ by 2028.",
+          "status": "resolved"
+        },
+        {
+          "id": 2,
+          "url": "https://openai.com/blog/chatgpt",
+          "quote": "We've trained a model called ChatGPT which interacts in a conversational way.",
+          "claim": "OpenAI launched ChatGPT in November 2022, defining the consumer AI assistant category.",
+          "status": "resolved"
+        }
+      ],
+      "model_version": "claude-haiku-4-5"
+    }
+  }
+}

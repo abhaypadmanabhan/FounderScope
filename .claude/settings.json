@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /Users/abhayp/Downloads/Projects/FounderScope/.claude/hooks/skill-enforce.sh",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}
