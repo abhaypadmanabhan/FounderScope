@@ -1,21 +1,17 @@
-// Company report page — phase 2 renders raw JSON dumps per section.
-// Phase 3 will replace with section-specific UIs from the registry.
+// Company report page — wires SSE/cache state to per-section Renderers from the registry.
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { SECTIONS } from "@/lib/sections/registry";
+import type { Citation, RendererCompany } from "@/lib/sections/types";
 
 type SectionState =
   | { status: "pending" }
   | { status: "completed"; content: unknown; citations: unknown; modelVersion?: string; fromCache?: boolean }
   | { status: "failed"; reason: string };
 
-type Company = {
-  slug: string;
-  display_name: string;
-  domain: string | null;
-};
+type Company = RendererCompany;
 
 interface PageProps {
   params: { slug: string };
@@ -105,54 +101,106 @@ export default function CompanyPage({ params }: PageProps) {
     return () => abort.abort();
   }, [slug, initialMap]);
 
+  const rendererCompany: Company = company ?? {
+    slug,
+    display_name: humanizeSlug(slug),
+    domain: null,
+  };
+
   return (
-    <main className="mx-auto max-w-3xl px-4 py-8 space-y-12">
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">
-          {company?.display_name ?? slug.replace(/-/g, " ")}
-        </h1>
-        {company?.domain && (
-          <p className="text-sm text-muted-foreground">{company.domain}</p>
+    <div>
+      {/* Top utility bar */}
+      <div
+        className="sticky top-0 z-20 flex items-center justify-between px-12 py-3.5 backdrop-blur"
+        style={{
+          background: "color-mix(in oklab, var(--bg) 80%, transparent)",
+          borderBottom: "1px solid var(--border-faint)",
+        }}
+      >
+        <div
+          className="flex items-center gap-2.5 text-xs"
+          style={{ color: "var(--text-faint)" }}
+        >
+          {phase === "done" && "Cached · loaded from store"}
+          {phase === "researching" && "Researching live · streaming sections"}
+          {phase === "loading" && "Loading…"}
+          {phase === "needs_key" && "Anthropic API key required for fresh research"}
+          {phase === "error" && (errorMsg ?? "Error")}
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-[720px] px-12 pt-14 pb-12">
+        {phase === "needs_key" && (
+          <div
+            className="mb-12 rounded-md p-4 text-sm"
+            style={{
+              border: "1px solid var(--accent-border)",
+              background: "var(--accent-bg)",
+              color: "var(--text)",
+            }}
+          >
+            Set your Anthropic API key in{" "}
+            <Link className="underline font-medium" href="/settings">
+              /settings
+            </Link>{" "}
+            to research new companies. Cached reports load without a key.
+          </div>
         )}
-        <p className="text-xs text-muted-foreground">phase: {phase}</p>
-      </header>
 
-      {phase === "needs_key" && (
-        <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-4 text-sm">
-          Set your Anthropic API key in{" "}
-          <Link className="underline font-medium" href="/settings">/settings</Link>
-          {" "}to research new companies. Cached reports load without a key.
-        </div>
-      )}
+        {phase === "error" && errorMsg && (
+          <div
+            className="mb-12 rounded-md p-4 text-sm"
+            style={{
+              border: "1px solid hsl(var(--destructive) / 0.4)",
+              background: "hsl(var(--destructive) / 0.1)",
+              color: "var(--text)",
+            }}
+          >
+            Error: {errorMsg}
+          </div>
+        )}
 
-      {phase === "error" && errorMsg && (
-        <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm">
-          Error: {errorMsg}
-        </div>
-      )}
-
-      {SECTIONS.map((section) => {
-        const state = sections[section.key];
-        return (
-          <section key={section.key} aria-labelledby={`section-${section.key}`}>
-            <h2 id={`section-${section.key}`} className="text-lg font-semibold mb-4">
-              {section.title}
-            </h2>
-            {state.status === "pending" && <section.SkeletonRenderer />}
-            {state.status === "completed" && (
-              <pre className="text-xs whitespace-pre-wrap rounded-md bg-muted p-3 overflow-x-auto">
-                {JSON.stringify(state.content, null, 2)}
-              </pre>
-            )}
-            {state.status === "failed" && (
-              <div className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm">
-                Couldn&apos;t generate this section ({state.reason}). Try refreshing.
+        {SECTIONS.map((section) => {
+          const state = sections[section.key];
+          if (state.status === "pending") {
+            return (
+              <div key={section.key} className="mb-[88px]">
+                <section.SkeletonRenderer />
               </div>
-            )}
-          </section>
-        );
-      })}
-    </main>
+            );
+          }
+          if (state.status === "failed") {
+            return (
+              <div
+                key={section.key}
+                className="mb-[88px] rounded-md p-3 text-sm"
+                style={{
+                  border: "1px solid hsl(var(--destructive) / 0.4)",
+                  background: "hsl(var(--destructive) / 0.1)",
+                }}
+              >
+                Couldn&apos;t generate {section.title.toLowerCase()} ({state.reason}). Try refreshing.
+              </div>
+            );
+          }
+          // completed
+          const Renderer = section.Renderer as React.FC<{
+            data: unknown;
+            citations: Citation[];
+            company: Company;
+          }>;
+          return (
+            <div key={section.key} className="fade-in">
+              <Renderer
+                data={state.content}
+                citations={(state.citations as Citation[]) ?? []}
+                company={rendererCompany}
+              />
+            </div>
+          );
+        })}
+      </main>
+    </div>
   );
 }
 

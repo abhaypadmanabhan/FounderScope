@@ -1,42 +1,152 @@
-// App-level sidebar shell — collapsible, contains search and recent companies.
-// TODO(phase-3): populate with recent companies from search_history.
+// App-level sidebar — logomark + search trigger + recents + settings footer.
 "use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Home, Settings, Search } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
-import Link from "next/link";
+import { Logomark } from "./logomark";
+import { useSearchPalette } from "./search-palette-provider";
 
 export function AppSidebar() {
+  const pathname = usePathname();
+  const { openPalette } = useSearchPalette();
+  const { state } = useSidebar();
+  const collapsed = state === "collapsed";
+
+  const isHome = pathname === "/";
+  const isSettings = pathname === "/settings";
+
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link href="/" className="w-full">
-              <SidebarMenuButton className="font-semibold">
-                Founderscope
+            <Link href="/" aria-label="FounderScope home">
+              <SidebarMenuButton
+                className="hover:bg-transparent"
+                tooltip="FounderScope"
+              >
+                <Logomark size={20} />
+                {!collapsed && (
+                  <span
+                    className="serif"
+                    style={{ fontSize: 17, color: "var(--text)", letterSpacing: "-0.01em" }}
+                  >
+                    FounderScope
+                  </span>
+                )}
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
         </SidebarMenu>
+
+        {/* Search trigger */}
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              onClick={() => openPalette()}
+              tooltip="Search (⌘K)"
+              className="t-200"
+            >
+              <Search />
+              {!collapsed && (
+                <>
+                  <span style={{ flex: 1, color: "var(--text-faint)", fontSize: 13 }}>
+                    Research a company…
+                  </span>
+                  <kbd
+                    className="font-mono"
+                    style={{
+                      fontSize: 11,
+                      color: "var(--text-quiet)",
+                      padding: "1px 5px",
+                      border: "1px solid var(--border-color)",
+                      borderRadius: 4,
+                    }}
+                  >
+                    ⌘K
+                  </kbd>
+                </>
+              )}
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
+
       <SidebarContent>
-        {/* TODO(phase-3): search combobox and recent companies list */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <Link href="/">
+                  <SidebarMenuButton isActive={isHome} tooltip="Home">
+                    <Home />
+                    {!collapsed && <span>Home</span>}
+                  </SidebarMenuButton>
+                </Link>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {!collapsed && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="eyebrow">
+              Recently researched
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <div
+                className="px-3 py-2 text-xs italic"
+                style={{
+                  color: "var(--text-faint)",
+                  fontFamily: "var(--font-serif)",
+                }}
+              >
+                No recent searches yet.
+              </div>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
+
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <Link href="/settings" className="w-full">
-              <SidebarMenuButton>Settings</SidebarMenuButton>
+            <Link href="/settings">
+              <SidebarMenuButton isActive={isSettings} tooltip="Settings">
+                <Settings />
+                {!collapsed && <span>Settings</span>}
+              </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
         </SidebarMenu>
+        {!collapsed && (
+          <div
+            className="flex items-center justify-between px-3 pt-1 pb-1"
+            style={{ color: "var(--text-quiet)", fontSize: 11 }}
+          >
+            <span>v0.4 · open source</span>
+            <span className="inline-flex items-center gap-1">
+              <span
+                className="inline-block w-1.5 h-1.5 rounded-full"
+                style={{ background: "var(--rep-green)" }}
+              />
+              cache fresh
+            </span>
+          </div>
+        )}
       </SidebarFooter>
     </Sidebar>
   );

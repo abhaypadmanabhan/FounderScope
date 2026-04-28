@@ -2,9 +2,11 @@
 import { z } from "zod";
 import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SectionDefinition, Citation } from "./types";
+import type { SectionDefinition, RendererProps, Citation } from "./types";
 import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
+import { SectionShell } from "@/components/section-shell";
+import { CompanyLogo } from "@/components/company-logo";
 
 const outputSchema = z.object({
   summary: z.string(),
@@ -40,21 +42,102 @@ const outputSchema = z.object({
 });
 type Output = z.infer<typeof outputSchema>;
 
-const Renderer: React.FC<{ data: Output; citations: Citation[] }> = ({ data }) =>
-  React.createElement(
-    "pre",
-    { className: "text-xs whitespace-pre-wrap rounded-md bg-muted p-3" },
-    JSON.stringify(data, null, 2)
-  );
+const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, company }) => {
+  const badges = buildBadges(data);
+  return (
+    <SectionShell eyebrow="Snapshot" n="01">
+      <div className="flex items-start gap-5 mb-7">
+        <CompanyLogo name={company.display_name} domain={company.domain} size={64} />
+        <div className="flex-1 pt-1">
+          <h1 className="h-1 m-0 mb-1.5" style={{ color: "var(--text)" }}>
+            {company.display_name}
+          </h1>
+          {data.tagline && (
+            <div
+              className="mb-3.5 italic"
+              style={{
+                color: "var(--text-muted)",
+                fontSize: 15,
+                fontFamily: "var(--font-serif)",
+              }}
+            >
+              {data.tagline}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-1.5">
+            {badges.map((b, i) => (
+              <span
+                key={i}
+                className="px-2.5 py-0.5 rounded-full"
+                style={{
+                  fontSize: 12,
+                  border: "1px solid var(--border-color)",
+                  color: "var(--text-muted)",
+                  background: "var(--bg-elevated)",
+                }}
+              >
+                {b}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
 
-const SkeletonRenderer: React.FC = () =>
-  React.createElement(
-    "div",
-    { className: "space-y-2" },
-    React.createElement(Skeleton, { className: "h-4 w-3/4" }),
-    React.createElement(Skeleton, { className: "h-4 w-1/2" }),
-    React.createElement(Skeleton, { className: "h-4 w-5/6" })
+      <p className="lead">{renderWithCitations(data.summary, citations)}</p>
+    </SectionShell>
   );
+};
+
+const SkeletonRenderer: React.FC = () => (
+  <div className="space-y-2">
+    <Skeleton className="h-4 w-3/4" />
+    <Skeleton className="h-4 w-1/2" />
+    <Skeleton className="h-4 w-5/6" />
+  </div>
+);
+
+function buildBadges(d: Output): string[] {
+  const out: string[] = [];
+  if (d.business_model && d.business_model !== "Other") out.push(d.business_model);
+  if (d.stage && d.stage !== "Unknown") out.push(d.stage);
+  if (d.industry) out.push(d.industry);
+  if (d.founded_year) out.push(`Founded ${d.founded_year}`);
+  if (d.employee_count_band && d.employee_count_band !== "Unknown") {
+    out.push(`~${d.employee_count_band}`);
+  }
+  if (d.hq) out.push(d.hq);
+  return out.slice(0, 6);
+}
+
+// Append [n] superscripts at the end of the summary for each cited claim.
+// Minimal: superscript opens citation URL in new tab on click. Rich popovers come with the moat slice.
+function renderWithCitations(text: string, citations: Citation[]): React.ReactNode {
+  const cited = citations.filter((c) => c?.url);
+  if (cited.length === 0) return text;
+  return (
+    <>
+      {text}
+      {cited.map((c) => (
+        <CitationSup key={c.id} citation={c} />
+      ))}
+    </>
+  );
+}
+
+function CitationSup({ citation }: { citation: Citation }) {
+  return (
+    <sup
+      className="cite"
+      title={citation.quote || citation.claim}
+      onClick={(e) => {
+        e.preventDefault();
+        window.open(citation.url, "_blank", "noopener");
+      }}
+    >
+      {citation.id}
+    </sup>
+  );
+}
 
 export const snapshot: SectionDefinition<Output> = {
   key: "snapshot",

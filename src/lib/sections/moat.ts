@@ -2,7 +2,7 @@
 import { z } from "zod";
 import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SectionDefinition, Citation } from "./types";
+import type { SectionDefinition, RendererProps } from "./types";
 import { REASONING_MODEL, REASONING_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
 
@@ -59,7 +59,7 @@ const outputSchema = z.object({
 });
 type Output = z.infer<typeof outputSchema>;
 
-const Renderer: React.FC<{ data: Output; citations: Citation[] }> = ({ data }) =>
+const Renderer: React.FC<RendererProps<Output>> = ({ data }) =>
   React.createElement(
     "pre",
     { className: "text-xs whitespace-pre-wrap rounded-md bg-muted p-3" },

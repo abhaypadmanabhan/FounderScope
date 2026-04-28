@@ -37,6 +37,19 @@ export type Citation = {
   status?: CitationStatus;
 };
 
+// Lightweight company info passed into section renderers (for logo, slug links, etc.).
+export type RendererCompany = {
+  slug: string;
+  display_name: string;
+  domain: string | null;
+};
+
+export type RendererProps<T> = {
+  data: T;
+  citations: Citation[];
+  company: RendererCompany;
+};
+
 export interface SectionDefinition<T = unknown> {
   key: string;
   title: string;
@@ -47,6 +60,6 @@ export interface SectionDefinition<T = unknown> {
   webSearchVersion: WebSearchToolVersion;
   buildPrompt: (company: CompanyInput) => string;
   outputSchema: ZodType<T>;
-  Renderer: React.FC<{ data: T; citations: Citation[] }>;
+  Renderer: React.FC<RendererProps<T>>;
   SkeletonRenderer: React.FC;
 }
