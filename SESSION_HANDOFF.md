@@ -1,27 +1,52 @@
 # Founderscope — Session Handoff
 
-> **Repo placement:** `SESSION_HANDOFF.md` at repo root. Read this first in the next session before any code changes.
+> **Read this first** before any code changes. Repo placement: root.
 
 ## What this product is
 
-Open-source company research tool. Type a company name → get a structured founder's-eye report in 7 sections (snapshot, moat, founders, tech stack, funding, traction, market) with cited sources. Hero feature is moat analysis with a 4-axis "AI-native replicability score." Stack: Next.js 14 + TypeScript + shadcn/ui + Supabase + Anthropic SDK with web search.
+Open-source company research tool for founders. Type a company name → get a structured 7-section report (snapshot, moat, founders, tech stack, funding, traction, market) with cited sources. Hero feature is moat analysis with a 4-axis "AI-native replicability score." Stack: Next.js 14 + TypeScript + shadcn/ui (base-nova) + Supabase + Anthropic SDK with web search + Recharts.
 
 ## Where we are right now
 
-**Phase 1 (scaffold):** Done. Section registry pattern, 7 stub sections, Supabase wired, sidebar shell.
+**Initial commit landed:** `383de1d` — scaffold + Phase 1 (section registry, Supabase, sidebar shell) + Phase 2 (research engine end-to-end with disambiguation, schema-in-prompt, citation validation) + founder-intel reframe (chunks 1–6 + cache-route alignment) all in one.
 
-**Phase 2 (research engine):** Done and working end-to-end via curl. Patches landed:
-- Per-section model + per-section web_search tool version on `SectionDefinition`
-- Tool-use loop with `MAX_TURNS = 12`
-- Diagnostic logging on schema_validation and model_error
-- Strict-with-trust-layer citation validation (resolved / gated / dead)
-- Schema-in-prompt with one-shot examples (huge fix — previously Haiku invented its own JSON shapes)
-- Name disambiguation step before parallel sections
-- Server-side `ANTHROPIC_API_KEY` env fallback (header still wins if present)
+- 10 tests passing (`npm test`)
+- Type-check clean (`npx tsc --noEmit`)
+- Working tree clean
+- Cache route, SSE fresh path, SSE cache-hit path, and mock orchestrator all emit the identical `citation_status: { resolved, gated, dead, total }` shape on every section
+- Mock orchestrator works (`MOCK_RESEARCH=true`) — phase 3 frontend can be built against it for $0
 
-**Last live run on Anthropic:** All 7 sections completed cleanly via curl. Six rows visible in Supabase screenshot mid-stream; user says SQL returned empty for moat after — needs verification at start of next session.
+**Anthropic cached row in Supabase:** 6 of 7 sections present (snapshot, founders, tech_stack, funding, traction, market). Moat row absent — pre-existing gap, will backfill naturally on first fresh research run.
 
-**Phase 3 (frontend):** Not started.
+**Phase 3 (frontend renderers):** not started.
+
+## Posture (new — must read before tightening citation handling)
+
+Founder-intel orientation, not journalist orientation. Users research everything from public giants to 6-month-old YC startups. For early-stage targets, citations are signal, not a gate.
+
+Five load-bearing rules:
+
+1. **Citations annotate, never gate.** The orchestrator validates URLs (resolved / gated / dead) for UI display but never retries on dead-citation rates. The retry branch was deleted in the reframe — don't reintroduce it.
+2. **Claims may be inferred.** Set `citation_url=null + inferred=true` when synthesizing from observable facts without a citable source. Inventing URLs is forbidden; null + inferred is honest.
+3. **Founders is the only section that fails loud on empty findings.** `schema.min(1)` on `founders[]` forces a `section_failed` when no founders are identifiable — the user needs to know they got the wrong company or it's too stealth to research. Every other section accepts empty arrays as a finding.
+4. **Moat carries per-axis confidence.** `replicability.confidence: { data, network, distribution, regulatory }` is an enum (high/medium/low) orthogonal to score. A confident "no regulatory moat" is score 1–2, confidence: "high".
+5. `market.competitors` and `compounding_moments` accept `min(0)` — empty arrays are legitimate findings for early-stage targets.
+
+**Canonical version of this lives in `src/lib/sections/shared.ts` posture comment.** If this handoff doc and the posture comment ever drift, the comment wins.
+
+## What's verified working
+
+- Browser page renders cached data (chunk 1 fix from prior session — page-trigger debugging superseded by mock approach)
+- Mock orchestrator end-to-end with the new schema (10/10 tests, 7/7 SSE events emit citation_status)
+- Cache route emits citation_status on each section (verified live: 6/6 DB sections for Anthropic)
+- SSE no-retry behavior locked in by test (`__tests__/research.test.ts` asserts `moatPrompts.length === 1`)
+- Linear snapshot output proved the founder-intel snapshot prompt works on a non-Anthropic company
+- Citation validation classifies resolved / gated / dead correctly (with some false-positive deads on publisher domains — see deferred item below)
+
+## What's NOT verified
+
+- **Moat output quality on a fresh early-stage company (Wayline-class).** The reframe was designed for this case but only tested against the Anthropic fixture. First fresh research run after phase 3 frontend lands is the real test.
+- **Moat row in DB for Anthropic.** Will backfill naturally on first fresh research run; not a blocker.
 
 ## Models and costs
 
@@ -29,84 +54,51 @@ Open-source company research tool. Type a company name → get a structured foun
 - Other 6 sections: `claude-haiku-4-5` + `web_search_20250305`
 - Disambiguation: `claude-haiku-4-5` + `web_search_20250305`
 
-Actual cost per fresh research is **~$1.00**, not the ~$0.34 originally estimated. Web search billing (~$0.30 per company at ~30 searches) was the missed line item. User has spent $3.85 across debugging runs with no UI output yet.
+Roughly **~$5 spent total** across the project, including this session's Linear verification run (~$0.40–0.60). A fresh research run is ~$1.00 (web search ~$0.30 of that). Cost reductions deferred — they don't bite until fresh API calls resume, which is post-frontend.
 
-## Critical blocker — fix this first in next session
+## Suggested first actions for next session
 
-**The browser page does NOT trigger `/api/research`.** Every time the user has visited `/company/{slug}` in a browser, the server log shows only `GET /company/{slug} 200` and nothing else — no cache GET, no research POST. Manual `curl` against `/api/research` works perfectly and produces all 7 sections, so the backend is verified. The bug is purely in `src/app/company/[slug]/page.tsx`.
+1. **Start phase 3 frontend against `MOCK_RESEARCH=true`.** Read `DESIGN_PROMPT.md`. Free iteration, no API spend.
+2. **Build snapshot renderer first.** Simplest, well-shaped data, validates the rendering layer before tackling moat hero.
+3. **Moat hero last.** It's the design-heaviest section and the data is already tested as ship-ready against the Anthropic fixture.
+4. **Only run a fresh research call** when the renderers are good enough that you'd want to see real output in them. Probably on a fresh early-stage YC company (Wayline or similar) to actually test the founder-intel posture in the wild — that's the real validation gate for the reframe.
 
-**Suspected causes** (in order of likelihood):
-1. **Missing `"use client"` directive at top of file** — without it, useEffect doesn't run. Most likely cause.
-2. **Early return in the mount effect** — possibly the localStorage gate that was supposed to be removed in `PATCH_PAGE_TRIGGER.md`/`PATCH_PAGE_EFFECT.md`.
-3. **Async error in the effect being silently swallowed** — needs try/catch wrapping with `console.error`.
+## Open items deferred (not blockers)
 
-`PATCH_PAGE_EFFECT.md` was written to fix this but its completion summary was never confirmed. The next session must verify that patch's changes are actually in the file, or apply them fresh.
+- **Cost reduction #3:** Moat `max_tokens` 16384 → 8192 (~$0.15/research savings)
+- **Cost reduction #4:** web_search `max_uses` 8 → 5 for non-moat sections (~$0.10/research savings)
+- **Cost reduction #5:** Cache disambiguation table (~$0.03 + 5s on repeat searches)
+- **Cost reduction #7:** Add `anthropic.com/news`, `cnbc.com`, `techcrunch.com` to `GATED_DOMAINS` (prevents false-positive dead citations on publisher domains)
+- **`funding_summary` field doesn't exist.** Bootstrapped narrative currently routes through `milestones[]` with `kind: "other"`. Add a dedicated field if narrative slot is wanted.
+- **`PATCH_*.md` files in repo root** are now historical. Most are done; the page-trigger ones got superseded by the mock approach. Decide whether to delete them or move to a `/history` folder.
 
-## Cost-reduction priorities for next session
-
-User explicitly asked to cut API costs. In priority order:
-
-1. **Don't research anything until the page renders.** Every research run that doesn't end with a visible UI is wasted money. Fix the page first; only then run another research call. The Anthropic record already exists in Supabase as a cached row — phase 3 dev should be done against that cached data, not fresh runs.
-
-2. **Add a dev-mode mock orchestrator.** When `process.env.MOCK_RESEARCH=true`, `/api/research` returns canned JSON for a known slug from `__fixtures__/anthropic.json` instead of calling Anthropic. Frontend developers can iterate on UI for free. Critical for phase 3.
-
-3. **Reduce moat token cost.** `max_tokens: 16384` for Opus is overkill — moat outputs in our test runs were well under 5000 tokens. Lower to 8192. Saves ~50% on the moat output cost (output is the expensive side at $75/MTok for Opus). Ballpark: takes per-research from ~$1.00 to ~$0.85.
-
-4. **Lower web_search `max_uses`.** Currently 8 per section × 7 sections = up to 56 searches per company. Most sections used 4–6. Drop to `max_uses: 5` for non-moat sections, keep moat at 8. Reduces web search billing from ~$0.30 to ~$0.20.
-
-5. **Cache disambiguation.** Currently runs every fresh research. Add a `disambiguations` table keyed on the user input string → canonical slug. Saves ~$0.03 + 5 seconds on repeat searches of the same name.
-
-6. **Don't retry sections aggressively.** Current orchestrator retries once on dead-citation rejection. With the GATED_DOMAINS layer working, this almost never fires legitimately. Consider removing the retry or only retrying when >50% dead (currently >30%).
-
-7. **Add publisher domains to GATED_DOMAINS.** `anthropic.com/news`, `cnbc.com`, `techcrunch.com` are getting marked "dead" by the validator (likely 403 to non-browser UA). Add to gated list to reduce false-positive section rejections. This isn't direct cost reduction but prevents costly retries.
-
-## Phase 3 goals when we get there
+## Phase 3 goals (when we get there)
 
 Frontend wiring per `DESIGN_PROMPT.md`. Replace `<pre>JSON</pre>` with real renderers:
+
 - Snapshot: header card with logo (Clearbit), badge row, lead paragraph
-- Moat (HERO): giant serif replicability score, radar of 4 sub-axes, three opinionated callout blocks
+- Moat (HERO): giant serif replicability score, radar of 4 sub-axes with per-axis confidence overlay, three opinionated callout blocks
 - Founders: card grid → side sheet with full bio
 - Tech stack: two side-by-side stack grids + cost-breakdown stacked bar
 - Funding: timeline chart with annotated rounds
 - Traction: toggle group, line charts, "Estimated/Confirmed" badges
 - Market: TAM/SAM/SOM concentric rings, competitor logo grid
 
-Plus: search combobox (typeahead), settings page, sidebar populated from recent searches, citation hover popovers, refresh button.
+Plus: search combobox (typeahead), settings page, sidebar populated from recent searches, citation hover popovers (use the `citation_status` counts), refresh button.
 
-**Pre-phase-3 taste check still owed.** The hero moat-section UI design (giant score, radar, opinionated callouts) is riding on the moat output being sharp and opinionated. Read the moat JSON for Anthropic before phase 3 commits to that design. If it reads like Wikipedia, the moat prompt needs hardening first.
+## Pre-Phase-3 taste check (completed)
 
-## Open files / patches in flight
+The moat output was assessed against the Anthropic cached row before the reframe. Verdict: ship-ready for the hero UI design (giant score, radar, opinionated callouts). The assessment surfaced three optional tightenings (regulatory specificity, compounding moment citations, attack_vector structural-weakness rule) — all folded into the moat prompt during chunk 3 of the reframe. Phase 3 hero design is unblocked on content quality grounds.
 
-All patches are in repo root as `PATCH_*.md`:
-- `PATCH_MODEL_SWAP.md` — Done
-- `PATCH_DIAGNOSE_FAILURES.md` — Done
-- `PATCH_SERVER_KEY.md` — Done (folded into `PATCH_PAGE_TRIGGER.md`)
-- `PATCH_PAGE_TRIGGER.md` — Partially done; page-effect part may be incomplete
-- `PATCH_PAGE_EFFECT.md` — Status unconfirmed, likely the actual fix needed
-- `PATCH_SCHEMA_AND_DISAMBIG.md` — Done
+## Files of note
 
-## What's verified working
-
-- Supabase schema, RLS bypass with service role key, all 3 tables populated
-- `/api/research` POST → SSE stream → 7 sections complete in ~50–90 seconds
-- Schema-in-prompt + one-shot examples → zero schema_validation failures on Anthropic test run
-- Disambiguation runs first, passes canonical identity to all sections
-- Citation validation classifies resolved / gated / dead correctly (with some false-positive deads on publisher domains)
-- Cache hit on `/api/companies/{slug}` returns cached report
-
-## What's NOT verified
-
-- Browser page renders any of this. **This is the next-session blocker.**
-- Moat row exists in DB (user reports "SQL returned empty" — needs re-check, possibly mid-stream timing artifact)
-- Moat output quality (taste check never performed)
-
-## Suggested first actions in next session
-
-1. Open `src/app/company/[slug]/page.tsx`. Read it. Verify `"use client"` is at the top. Check the mount effect for early returns or unhandled errors. Fix.
-2. Hard refresh browser, visit `/company/anthropic`. Should hit cached data instantly with no Anthropic calls. **No new spend should be required.**
-3. Add the dev-mode mock orchestrator (priority 2 above) before any further research runs.
-4. Then taste-check moat from cache, then phase 3.
-
-## Costs already incurred
-
-~$3.85 total over phase 2 debugging. Anthropic data cached in Supabase represents the most expensive row — protect it (don't refresh, don't delete the company). It's the test fixture for phase 3.
+- `src/lib/sections/shared.ts` — canonical posture comment, claim schema, prompt builder
+- `src/lib/sections/moat.ts` — per-axis confidence schema, moat prompt + one-shot example
+- `src/lib/sections/founders.ts` — fail-loud policy
+- `src/lib/citations.ts` — `summarizeCitationStatuses` (fresh path) + `countCitationStatuses` (cache/mock paths)
+- `src/app/api/research/route.ts` — SSE orchestrator, no retry branch
+- `src/app/api/companies/[slug]/route.ts` — GET cache route, emits citation_status
+- `src/lib/mock-research.ts` — mock orchestrator, mirrors real SSE shape
+- `__fixtures__/research-anthropic.json` — Anthropic test fixture (used by mock)
+- `__tests__/research.test.ts` — orchestrator tests, locks no-retry behavior
+- `__tests__/mock-research.test.ts` — mock SSE tests
