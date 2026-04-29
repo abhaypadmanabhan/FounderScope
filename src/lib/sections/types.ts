@@ -44,10 +44,19 @@ export type RendererCompany = {
   domain: string | null;
 };
 
+// Section identity passed into every Renderer. Lets renderers stop hardcoding
+// their own eyebrow/order and lets future code derive anchor IDs from key.
+export type RendererSection = {
+  key: string;
+  title: string;
+  order: number;
+};
+
 export type RendererProps<T> = {
   data: T;
   citations: Citation[];
   company: RendererCompany;
+  section: RendererSection;
 };
 
 export interface SectionDefinition<T = unknown> {

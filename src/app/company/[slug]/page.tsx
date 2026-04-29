@@ -188,6 +188,7 @@ export default function CompanyPage({ params }: PageProps) {
             data: unknown;
             citations: Citation[];
             company: Company;
+            section: { key: string; title: string; order: number };
           }>;
           return (
             <div key={section.key} className="fade-in">
@@ -195,6 +196,11 @@ export default function CompanyPage({ params }: PageProps) {
                 data={state.content}
                 citations={(state.citations as Citation[]) ?? []}
                 company={rendererCompany}
+                section={{
+                  key: section.key,
+                  title: section.title,
+                  order: section.order,
+                }}
               />
             </div>
           );

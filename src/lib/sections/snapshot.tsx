@@ -7,6 +7,8 @@ import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
 import { SectionShell } from "@/components/section-shell";
 import { CompanyLogo } from "@/components/company-logo";
+import { CitationsTrail } from "@/components/citation-sup";
+import { padOrder } from "@/lib/sections/format";
 
 const outputSchema = z.object({
   summary: z.string(),
@@ -42,10 +44,10 @@ const outputSchema = z.object({
 });
 type Output = z.infer<typeof outputSchema>;
 
-const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, company }) => {
+const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, company, section }) => {
   const badges = buildBadges(data);
   return (
-    <SectionShell eyebrow="Snapshot" n="01">
+    <SectionShell eyebrow={section.title} n={padOrder(section.order)}>
       <div className="flex items-start gap-5 mb-7">
         <CompanyLogo name={company.display_name} domain={company.domain} size={64} />
         <div className="flex-1 pt-1">
@@ -110,32 +112,12 @@ function buildBadges(d: Output): string[] {
 }
 
 // Append [n] superscripts at the end of the summary for each cited claim.
-// Minimal: superscript opens citation URL in new tab on click. Rich popovers come with the moat slice.
 function renderWithCitations(text: string, citations: Citation[]): React.ReactNode {
-  const cited = citations.filter((c) => c?.url);
-  if (cited.length === 0) return text;
   return (
     <>
       {text}
-      {cited.map((c) => (
-        <CitationSup key={c.id} citation={c} />
-      ))}
+      <CitationsTrail citations={citations} />
     </>
-  );
-}
-
-function CitationSup({ citation }: { citation: Citation }) {
-  return (
-    <sup
-      className="cite"
-      title={citation.quote || citation.claim}
-      onClick={(e) => {
-        e.preventDefault();
-        window.open(citation.url, "_blank", "noopener");
-      }}
-    >
-      {citation.id}
-    </sup>
   );
 }
 
