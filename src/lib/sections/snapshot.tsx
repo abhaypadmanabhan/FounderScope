@@ -45,47 +45,92 @@ const outputSchema = z.object({
 type Output = z.infer<typeof outputSchema>;
 
 const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, company, section }) => {
-  const badges = buildBadges(data);
+  const meta = buildMetaPairs(data);
   return (
-    <SectionShell eyebrow={section.title} n={padOrder(section.order)}>
-      <div className="flex items-start gap-5 mb-7">
-        <CompanyLogo name={company.display_name} domain={company.domain} size={64} />
-        <div className="flex-1 pt-1">
-          <h1 className="h-1 m-0 mb-1.5" style={{ color: "var(--text)" }}>
-            {company.display_name}
-          </h1>
-          {data.tagline && (
-            <div
-              className="mb-3.5 italic"
+    <SectionShell eyebrow={section.title} n={padOrder(section.order)} width="wide">
+      <div
+        className="grid items-start gap-x-12 gap-y-8 mb-10 grid-cols-1 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
+      >
+        <div className="flex items-start gap-6">
+          <CompanyLogo name={company.display_name} domain={company.domain} size={96} />
+          <div className="flex-1 min-w-0 pt-1">
+            <h1
+              className="h-display m-0"
               style={{
-                color: "var(--text-muted)",
-                fontSize: 15,
-                fontFamily: "var(--font-serif)",
+                color: "var(--text)",
+                marginBottom: 8,
+                fontSize: 56,
+                lineHeight: 1.02,
               }}
             >
-              {data.tagline}
-            </div>
-          )}
-          <div className="flex flex-wrap gap-1.5">
-            {badges.map((b, i) => (
-              <span
-                key={i}
-                className="px-2.5 py-0.5 rounded-full"
+              {company.display_name}
+            </h1>
+            {data.tagline && (
+              <div
+                className="italic"
                 style={{
-                  fontSize: 12,
-                  border: "1px solid var(--border-color)",
                   color: "var(--text-muted)",
-                  background: "var(--bg-elevated)",
+                  fontSize: 18,
+                  fontFamily: "var(--font-serif)",
+                  lineHeight: 1.4,
                 }}
               >
-                {b}
-              </span>
-            ))}
+                {data.tagline}
+              </div>
+            )}
           </div>
         </div>
+        {meta.length > 0 && (
+          <dl
+            className="m-0"
+            style={{
+              borderTop: "1px solid var(--border-faint)",
+              borderBottom: "1px solid var(--border-faint)",
+            }}
+          >
+            {meta.map((m, i) => (
+              <div
+                key={m.label}
+                className="grid items-baseline"
+                style={{
+                  gridTemplateColumns: "96px 1fr",
+                  gap: 14,
+                  padding: "9px 0",
+                  borderTop: i === 0 ? "none" : "1px solid var(--border-faint)",
+                }}
+              >
+                <dt
+                  className="micro"
+                  style={{
+                    textTransform: "uppercase",
+                    letterSpacing: "0.13em",
+                    color: "var(--text-faint)",
+                    fontWeight: 500,
+                    fontSize: 11,
+                  }}
+                >
+                  {m.label}
+                </dt>
+                <dd
+                  className="m-0"
+                  style={{
+                    fontFamily: "var(--font-serif)",
+                    fontSize: 15,
+                    color: "var(--text)",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  {m.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </div>
 
-      <p className="lead">{renderWithCitations(data.summary, citations)}</p>
+      <p className="lead" style={{ maxWidth: 720, margin: 0 }}>
+        {renderWithCitations(data.summary, citations)}
+      </p>
     </SectionShell>
   );
 };
@@ -98,17 +143,19 @@ const SkeletonRenderer: React.FC = () => (
   </div>
 );
 
-function buildBadges(d: Output): string[] {
-  const out: string[] = [];
-  if (d.business_model && d.business_model !== "Other") out.push(d.business_model);
-  if (d.stage && d.stage !== "Unknown") out.push(d.stage);
-  if (d.industry) out.push(d.industry);
-  if (d.founded_year) out.push(`Founded ${d.founded_year}`);
-  if (d.employee_count_band && d.employee_count_band !== "Unknown") {
-    out.push(`~${d.employee_count_band}`);
+function buildMetaPairs(d: Output): { label: string; value: string }[] {
+  const pairs: { label: string; value: string }[] = [];
+  if (d.industry) pairs.push({ label: "Industry", value: d.industry });
+  if (d.business_model && d.business_model !== "Other") {
+    pairs.push({ label: "Model", value: d.business_model });
   }
-  if (d.hq) out.push(d.hq);
-  return out.slice(0, 6);
+  if (d.stage && d.stage !== "Unknown") pairs.push({ label: "Stage", value: d.stage });
+  if (d.founded_year) pairs.push({ label: "Founded", value: String(d.founded_year) });
+  if (d.employee_count_band && d.employee_count_band !== "Unknown") {
+    pairs.push({ label: "Headcount", value: `~${d.employee_count_band}` });
+  }
+  if (d.hq) pairs.push({ label: "HQ", value: d.hq });
+  return pairs;
 }
 
 // Append [n] superscripts at the end of the summary for each cited claim.

@@ -9,7 +9,12 @@ import { SectionShell } from "@/components/section-shell";
 import { CitationsTrail } from "@/components/citation-sup";
 import { ReplicabilityScore, colorForScore } from "@/components/replicability-score";
 import { ReplicabilityRadar, type RadarAxis } from "@/components/replicability-radar";
+import { ConfidenceDot, type ConfidenceVariant } from "@/components/confidence-dot";
 import { padOrder } from "@/lib/sections/format";
+
+function moatConfidenceToVariant(c: "high" | "medium" | "low"): ConfidenceVariant {
+  return c === "high" ? "full" : c === "medium" ? "partial" : "empty";
+}
 
 const confidenceEnum = z.enum(["high", "medium", "low"]);
 
@@ -135,7 +140,7 @@ const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, section })
 
       {/* Per-axis breakdown — single-line rows, prose fills the right side */}
       <div className="mb-12">
-        <h3 className="eyebrow mb-4">By axis</h3>
+        <h3 className="h-3 mb-4" style={{ color: "var(--text)" }}>By axis</h3>
         <div style={{ borderBottom: "1px solid var(--border-faint)" }}>
           {AXIS_META.map((m) => (
             <AxisRow
@@ -157,7 +162,7 @@ const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, section })
       {/* Compounding moments — vertical timeline with dot rail */}
       {data.compounding_moments.length > 0 && (
         <div className="mt-12">
-          <h3 className="eyebrow mb-6">Compounding moments</h3>
+          <h3 className="h-3 mb-5" style={{ color: "var(--text)" }}>Compounding moments</h3>
           <ol
             className="relative list-none p-0 m-0"
             style={{ paddingLeft: 28 }}
@@ -228,7 +233,10 @@ function AxisRow({ label, score, confidence, reasoning }: AxisRowProps) {
         >
           {score}
         </span>
-        <ConfidenceDot confidence={confidence} />
+        <ConfidenceDot
+          variant={moatConfidenceToVariant(confidence)}
+          title={`${confidence} confidence`}
+        />
       </span>
       <p
         style={{
@@ -241,31 +249,6 @@ function AxisRow({ label, score, confidence, reasoning }: AxisRowProps) {
         {reasoning}
       </p>
     </div>
-  );
-}
-
-// Reuses radar dot vocabulary: high=filled, medium=half-fill, low=hollow+dashed.
-function ConfidenceDot({ confidence }: { confidence: "high" | "medium" | "low" }) {
-  const styles =
-    confidence === "high"
-      ? { background: "var(--accent-color)", border: "1.5px solid var(--accent-color)" }
-      : confidence === "medium"
-      ? { background: "var(--bg-elevated)", border: "1.5px solid var(--accent-color)" }
-      : { background: "transparent", border: "1.5px dashed var(--accent-color)" };
-
-  return (
-    <span
-      aria-hidden
-      title={`${confidence} confidence`}
-      style={{
-        width: 9,
-        height: 9,
-        borderRadius: 999,
-        display: "inline-block",
-        transform: "translateY(-2px)",
-        ...styles,
-      }}
-    />
   );
 }
 

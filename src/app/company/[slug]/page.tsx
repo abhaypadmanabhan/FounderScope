@@ -101,10 +101,10 @@ export default function CompanyPage({ params }: PageProps) {
     return () => abort.abort();
   }, [slug, initialMap]);
 
-  const rendererCompany: Company = company ?? {
+  const rendererCompany: Company = {
     slug,
-    display_name: humanizeSlug(slug),
-    domain: null,
+    display_name: company?.display_name?.trim() || humanizeSlug(slug),
+    domain: company?.domain ?? null,
   };
 
   return (
@@ -129,7 +129,7 @@ export default function CompanyPage({ params }: PageProps) {
         </div>
       </div>
 
-      <main className="mx-auto max-w-[720px] px-12 pt-14 pb-12">
+      <main className="mx-auto max-w-[1080px] px-8 lg:px-14 pt-14 pb-12">
         {phase === "needs_key" && (
           <div
             className="mb-12 rounded-md p-4 text-sm"

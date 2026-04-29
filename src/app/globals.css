@@ -82,6 +82,13 @@
     --accent-bg:    rgba(179, 85, 74, 0.12);
     --accent-border:rgba(179, 85, 74, 0.32);
 
+    /* ── Avatar tones (dark) — oxblood-adjacent palette ── */
+    --avatar-0-fg: #b3554a; --avatar-0-bg: rgba(179, 85, 74, 0.14);  --avatar-0-border: rgba(179, 85, 74, 0.36);
+    --avatar-1-fg: #b8623f; --avatar-1-bg: rgba(184, 98, 63, 0.14);  --avatar-1-border: rgba(184, 98, 63, 0.36);
+    --avatar-2-fg: #a85055; --avatar-2-bg: rgba(168, 80, 85, 0.14);  --avatar-2-border: rgba(168, 80, 85, 0.36);
+    --avatar-3-fg: #b86048; --avatar-3-bg: rgba(184, 96, 72, 0.14);  --avatar-3-border: rgba(184, 96, 72, 0.36);
+    --avatar-4-fg: #9a4858; --avatar-4-bg: rgba(154, 72, 88, 0.16);  --avatar-4-border: rgba(154, 72, 88, 0.38);
+
     --callout-bg:     #1f1c14;
     --callout-border: #b3554a;
 
@@ -150,6 +157,13 @@
     --accent-fg:    #ffffff;
     --accent-bg:    rgba(143, 61, 51, 0.08);
     --accent-border:rgba(143, 61, 51, 0.24);
+
+    /* ── Avatar tones (light) — oxblood-adjacent palette ── */
+    --avatar-0-fg: #8f3d33; --avatar-0-bg: rgba(143, 61, 51, 0.09);  --avatar-0-border: rgba(143, 61, 51, 0.28);
+    --avatar-1-fg: #94462c; --avatar-1-bg: rgba(148, 70, 44, 0.09);  --avatar-1-border: rgba(148, 70, 44, 0.28);
+    --avatar-2-fg: #883a3e; --avatar-2-bg: rgba(136, 58, 62, 0.09);  --avatar-2-border: rgba(136, 58, 62, 0.28);
+    --avatar-3-fg: #964531; --avatar-3-bg: rgba(150, 69, 49, 0.09);  --avatar-3-border: rgba(150, 69, 49, 0.28);
+    --avatar-4-fg: #7c3641; --avatar-4-bg: rgba(124, 54, 65, 0.11);  --avatar-4-border: rgba(124, 54, 65, 0.30);
 
     --callout-bg:     #fbf6f4;
     --callout-border: #8f3d33;

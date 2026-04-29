@@ -12,31 +12,45 @@ import { padOrder } from "@/lib/sections/format";
 import type { Citation, RendererProps } from "./types";
 import { avatarTiers, type Founder, type FoundersOutput } from "./founders";
 
-function initialsOf(name: string): string {
+export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+// Deterministic name → 0..4. Sibling founders sharing initials (e.g. Dario +
+// Daniela Amodei → both "DA") still land on different tones because the hash
+// folds in the full string, not just the initials.
+export function avatarToneIndex(name: string): 0 | 1 | 2 | 3 | 4 {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) {
+    h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  }
+  return (Math.abs(h) % 5) as 0 | 1 | 2 | 3 | 4;
+}
+
 function InitialsAvatar({ name, size }: { name: string; size: number }) {
+  const tone = avatarToneIndex(name);
   return (
     <div
       aria-label={name}
+      data-avatar-tone={tone}
       style={{
         width: size,
         height: size,
         borderRadius: 999,
-        background: "var(--bg-elevated)",
-        border: "1px solid var(--border-color)",
+        background: `var(--avatar-${tone}-bg)`,
+        border: `1px solid var(--avatar-${tone}-border)`,
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         fontFamily: "var(--font-serif)",
-        fontSize: Math.round(size * 0.42),
+        fontWeight: 600,
+        fontSize: Math.round(size * 0.46),
         lineHeight: 1,
-        color: "var(--accent-color)",
-        letterSpacing: "0.01em",
+        color: `var(--avatar-${tone}-fg)`,
+        letterSpacing: "-0.01em",
         flexShrink: 0,
       }}
     >
@@ -150,9 +164,8 @@ function FounderCard({
         <FounderAvatar founder={founder} size={52} />
         <div className="flex-1 min-w-0">
           <h3
-            className="m-0"
+            className="h-3 m-0"
             style={{
-              fontFamily: "var(--font-serif)",
               fontSize: 22,
               lineHeight: 1.18,
               letterSpacing: "-0.015em",
@@ -260,14 +273,10 @@ function FounderSheetBody({
         <FounderAvatar founder={founder} size={84} />
         <div className="pt-1 min-w-0">
           <SheetTitle
-            className="m-0"
+            className="h-2 m-0"
             style={{
-              fontFamily: "var(--font-serif)",
-              fontSize: 28,
-              lineHeight: 1.15,
-              letterSpacing: "-0.015em",
-              color: "var(--text)",
               fontWeight: 400,
+              color: "var(--text)",
               marginBottom: 4,
             }}
           >
