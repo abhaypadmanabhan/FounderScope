@@ -16,6 +16,7 @@ const outputSchema = z.object({
         linkedin_url: z.string().url().nullable(),
         twitter_url: z.string().url().nullable(),
         personal_site: z.string().url().nullable(),
+        github_url: z.string().url().nullable(),
         college: z.string().nullable(),
         prior_companies: z.array(z.string()),
         technical: z.boolean(),
@@ -50,7 +51,7 @@ export const founders: SectionDefinition<Output> = {
   title: "Founders",
   order: 3,
   cacheTtlDays: 30,
-  schemaVersion: 2,
+  schemaVersion: 3,
   model: DEFAULT_MODEL,
   webSearchVersion: DEFAULT_WEB_SEARCH,
   buildPrompt: (c) =>
@@ -67,19 +68,32 @@ For each founder:
 - technical: true if they write code or have CS/ML/EE background, else false.
 - what_they_bring: one line (e.g. 'distribution from prior YC network').
 - full_bio: 2-4 sentences. Stick to verifiable facts; do not pad with speculation.
-- photo_url: ONLY if you find one on a public source you can cite — Wikipedia, company About page, public conference talks. Never invent. Use null otherwise.
-- linkedin_url, twitter_url, personal_site: include if publicly known, else null.
-- claims: cite every concrete fact (college, prior company, role) with a real URL where possible. If a fact is observable but unsourced, citation_url/quote: null and inferred: true.`,
+
+DIRECTED LINK COLLECTION — do these searches actively, don't wait for links to surface incidentally:
+
+- linkedin_url: Search '[founder name] [company name] linkedin' and extract the canonical https://www.linkedin.com/in/[handle] URL. This is usually findable for any public founder.
+- github_url: For founders with technical: true, search '[founder name] github' and capture the URL ONLY if a search result confirms a personal GitHub profile (https://github.com/[handle]). Do NOT guess based on common username patterns; null is correct when unconfirmed.
+- photo_url: ONLY capture from Wikipedia/Wikimedia Commons URLs (upload.wikimedia.org/...). These are durable and licensed for reuse. Do NOT capture photo URLs from LinkedIn, Crunchbase, news sites, company about pages, or any other source — those URLs rot via CDN tokens, ToS, or referrer rules and break cached reports. The renderer has a designed initials fallback; null is honest.
+- personal_site: Capture if a clear personal portfolio/blog exists. Optional, low priority.
+- twitter_url: Capture the canonical https://twitter.com/[handle] or https://x.com/[handle] URL if findable from search results.
+
+Set the corresponding claim's inferred: false only when you have a real cited source for the link. If you guessed or extrapolated, leave the field null — null is honest, a guess is a bug.
+
+COST NOTE: 1–2 extra web_search calls per founder for these directed lookups is fine. Don't burn searches on personal_site if early hits don't surface one — that field is low priority.
+
+- claims: cite every concrete fact (college, prior company, role, link) with a real URL where possible. If a fact is observable but unsourced, citation_url/quote: null and inferred: true.`,
       schema: outputSchema,
       example: {
         founders: [
           {
             name: "Dario Amodei",
             role: "CEO",
-            photo_url: null,
-            linkedin_url: null,
+            photo_url:
+              "https://upload.wikimedia.org/wikipedia/commons/example/Dario_Amodei.jpg",
+            linkedin_url: "https://www.linkedin.com/in/dario-amodei-3934934/",
             twitter_url: "https://twitter.com/DarioAmodei",
             personal_site: null,
+            github_url: null,
             college: "Princeton (PhD)",
             prior_companies: ["OpenAI", "Google Brain", "Baidu"],
             technical: true,
@@ -95,6 +109,7 @@ For each founder:
             linkedin_url: "https://www.linkedin.com/in/daniela-amodei-790bb22a/",
             twitter_url: null,
             personal_site: null,
+            github_url: null,
             college: "UC Santa Cruz",
             prior_companies: ["OpenAI", "Stripe"],
             technical: false,

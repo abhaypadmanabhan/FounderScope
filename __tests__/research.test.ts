@@ -380,6 +380,7 @@ function cannedJsonForPrompt(prompt: string): string {
           linkedin_url: null,
           twitter_url: null,
           personal_site: null,
+          github_url: null,
           college: "MIT",
           prior_companies: ["Auctomatic"],
           technical: true,
