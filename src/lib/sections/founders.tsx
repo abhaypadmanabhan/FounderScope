@@ -1,10 +1,20 @@
 // Section 3 — Founders: per-founder cards with bio sheet.
+//
+// Avatar strategy is three-tier:
+//   1. photo_url (model captures Wikipedia/Wikimedia only — durable URLs)
+//   2. derived github avatar (https://github.com/{handle}.png?size=200) for
+//      founders whose github_url surfaced
+//   3. designed initials fallback (most founders, especially non-famous, hit
+//      this and it should look intentional, not "missing photo")
+//
+// Renderer + SkeletonRenderer live in founders-view.tsx ("use client").
+// This module stays server-importable so the orchestrator can read schema
+// and prompt without dragging client-only code into the server bundle.
 import { z } from "zod";
-import React from "react";
-import { Skeleton } from "@/components/ui/skeleton";
-import type { SectionDefinition, RendererProps } from "./types";
+import type { SectionDefinition } from "./types";
 import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
+import { FoundersRenderer, FoundersSkeletonRenderer } from "./founders-view";
 
 const outputSchema = z.object({
   founders: z
@@ -28,25 +38,40 @@ const outputSchema = z.object({
     .max(6),
   claims: claimsSchema,
 });
-type Output = z.infer<typeof outputSchema>;
+export type FoundersOutput = z.infer<typeof outputSchema>;
+export type Founder = FoundersOutput["founders"][number];
 
-const Renderer: React.FC<RendererProps<Output>> = ({ data }) =>
-  React.createElement(
-    "pre",
-    { className: "text-xs whitespace-pre-wrap rounded-md bg-muted p-3" },
-    JSON.stringify(data, null, 2)
-  );
+// Reserved (non-user) GitHub paths that look like /handle but aren't.
+const GH_RESERVED = new Set([
+  "orgs", "topics", "collections", "trending", "sponsors", "marketplace",
+  "explore", "pricing", "features", "settings", "login", "join", "logout",
+  "new", "about", "contact", "security", "site", "enterprise",
+]);
 
-const SkeletonRenderer: React.FC = () =>
-  React.createElement(
-    "div",
-    { className: "space-y-2" },
-    React.createElement(Skeleton, { className: "h-4 w-3/4" }),
-    React.createElement(Skeleton, { className: "h-4 w-1/2" }),
-    React.createElement(Skeleton, { className: "h-4 w-5/6" })
-  );
+export function parseGithubHandle(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const m = url.match(/^https?:\/\/(?:www\.)?github\.com\/([^/?#]+)/i);
+  if (!m) return null;
+  const handle = m[1];
+  if (GH_RESERVED.has(handle.toLowerCase())) return null;
+  return handle;
+}
 
-export const founders: SectionDefinition<Output> = {
+export type AvatarTier =
+  | { kind: "photo"; url: string }
+  | { kind: "github"; url: string };
+
+export function avatarTiers(f: Pick<Founder, "photo_url" | "github_url">): AvatarTier[] {
+  const out: AvatarTier[] = [];
+  if (f.photo_url) out.push({ kind: "photo", url: f.photo_url });
+  const handle = parseGithubHandle(f.github_url);
+  if (handle) {
+    out.push({ kind: "github", url: `https://github.com/${handle}.png?size=200` });
+  }
+  return out;
+}
+
+export const founders: SectionDefinition<FoundersOutput> = {
   key: "founders",
   title: "Founders",
   order: 3,
@@ -131,6 +156,6 @@ COST NOTE: 1–2 extra web_search calls per founder for these directed lookups i
       },
     }),
   outputSchema,
-  Renderer,
-  SkeletonRenderer,
+  Renderer: FoundersRenderer,
+  SkeletonRenderer: FoundersSkeletonRenderer,
 };
