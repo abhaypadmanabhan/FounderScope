@@ -78,7 +78,7 @@ export function SearchPalette({ open, initialQuery = "", onOpenChange }: Props) 
   function freshResearch() {
     const trimmed = query.trim();
     if (!trimmed) return;
-    navigate(slugify(trimmed));
+    navigate(slugify(deriveCompanyName(trimmed)));
   }
 
   const trimmed = query.trim();
@@ -244,6 +244,19 @@ export function SearchPalette({ open, initialQuery = "", onOpenChange }: Props) 
       </DialogContent>
     </Dialog>
   );
+}
+
+// Strip URL/host inputs down to a company-name root. "https://www.stackai.com" → "stackai".
+// Falls through to the original input when it doesn't look URL-shaped.
+function deriveCompanyName(input: string): string {
+  const trimmed = input.trim();
+  const urlMatch = trimmed.match(/^(?:https?:\/\/)?([^\s/?#]+)/i);
+  if (urlMatch && urlMatch[1].includes(".")) {
+    const host = urlMatch[1].replace(/^www\./i, "");
+    const root = host.split(".")[0];
+    if (root) return root;
+  }
+  return trimmed;
 }
 
 function Kbd({ children, inline = false }: { children: React.ReactNode; inline?: boolean }) {

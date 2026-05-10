@@ -356,6 +356,18 @@ function handleEvent(
 ) {
   if (event === "company") {
     cbs.onCompany(data as Company);
+  } else if (event === "disambiguated") {
+    // Server-side disambiguation may pick a cleaner canonical_name and resolve
+    // the actual domain. Promote both into the rendered company so the heading
+    // matches what every section is actually researching.
+    const d = data as { canonical_name?: string; canonical_domain?: string | null };
+    if (d.canonical_name) {
+      cbs.onCompany({
+        slug: "",
+        display_name: d.canonical_name,
+        domain: d.canonical_domain ?? null,
+      } as Company);
+    }
   } else if (event === "section_started") {
     const d = data as { section_key: string };
     cbs.onSection(d.section_key, { status: "pending" });

@@ -85,7 +85,11 @@ async function doCall<T>(args: RunArgs<T>): Promise<{ data: T; raw: string; mode
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const tools = [
     { type: webSearchVersion, name: "web_search", max_uses: 8 },
-    { type: "code_execution_20250522", name: "code_execution" },
+    // Dynamic-filtering beta auto-injects code_execution. Adding our own
+    // would collide on tool name. Only declare explicitly when beta is OFF.
+    ...(useBeta
+      ? []
+      : [{ type: "code_execution_20250522", name: "code_execution" }]),
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ] as any;
 
