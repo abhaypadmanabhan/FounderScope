@@ -12,7 +12,6 @@
 // and prompt without dragging client-only code into the server bundle.
 import { z } from "zod";
 import type { SectionDefinition } from "./types";
-import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
 import { FoundersRenderer, FoundersSkeletonRenderer } from "./founders-view";
 
@@ -77,8 +76,7 @@ export const founders: SectionDefinition<FoundersOutput> = {
   order: 3,
   cacheTtlDays: 30,
   schemaVersion: 3,
-  model: DEFAULT_MODEL,
-  webSearchVersion: DEFAULT_WEB_SEARCH,
+  tier: "default",
   buildPrompt: (c) =>
     buildSectionPrompt({
       company: c,

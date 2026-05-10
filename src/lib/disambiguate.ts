@@ -3,8 +3,7 @@
 // different real-world entities for ambiguous names ("Bolt" → mobility vs
 // Bolt.new vs Bolt Financial).
 import { z } from "zod";
-import { runResearchCall } from "./anthropic";
-import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./sections/types";
+import { runResearchCall, type ProviderConfig } from "./llm";
 
 export const DisambiguationSchema = z.object({
   canonical_name: z.string(),
@@ -15,7 +14,7 @@ export const DisambiguationSchema = z.object({
 export type Disambiguation = z.infer<typeof DisambiguationSchema>;
 
 export async function disambiguateCompany(opts: {
-  apiKey: string;
+  config: ProviderConfig;
   name: string;
   domain: string | null;
 }): Promise<Disambiguation> {
@@ -63,9 +62,8 @@ EXAMPLE OUTPUT:
 Begin researching now using web_search. When done, output JSON only.`;
 
   const result = await runResearchCall({
-    apiKey: opts.apiKey,
-    model: DEFAULT_MODEL,
-    webSearchVersion: DEFAULT_WEB_SEARCH,
+    config: opts.config,
+    tier: "default",
     prompt,
     schema: DisambiguationSchema,
   });

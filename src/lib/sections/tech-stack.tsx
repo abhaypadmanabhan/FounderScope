@@ -3,7 +3,6 @@ import { z } from "zod";
 import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SectionDefinition, RendererProps } from "./types";
-import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema, type Claim } from "./shared";
 import { SectionShell } from "@/components/section-shell";
 import { CitationsTrail } from "@/components/citation-sup";
@@ -328,8 +327,7 @@ export const techStack: SectionDefinition<Output> = {
   order: 4,
   cacheTtlDays: 14,
   schemaVersion: 2,
-  model: DEFAULT_MODEL,
-  webSearchVersion: DEFAULT_WEB_SEARCH,
+  tier: "default",
   buildPrompt: (c) =>
     buildSectionPrompt({
       company: c,

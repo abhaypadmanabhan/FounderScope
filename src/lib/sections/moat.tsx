@@ -3,7 +3,6 @@ import { z } from "zod";
 import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SectionDefinition, RendererProps } from "./types";
-import { REASONING_MODEL, REASONING_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
 import { SectionShell } from "@/components/section-shell";
 import { CitationsTrail } from "@/components/citation-sup";
@@ -451,8 +450,7 @@ export const moat: SectionDefinition<Output> = {
   order: 2,
   cacheTtlDays: 30,
   schemaVersion: 2,
-  model: REASONING_MODEL,
-  webSearchVersion: REASONING_WEB_SEARCH,
+  tier: "reasoning",
   buildPrompt: (c) =>
     buildSectionPrompt({
       company: c,

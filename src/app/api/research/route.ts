@@ -10,7 +10,7 @@ import {
   updateCompanyCanonical,
 } from "@/lib/companies";
 import { getCachedSection, upsertCachedSection } from "@/lib/cache";
-import { runResearchCall, ResearchError } from "@/lib/anthropic";
+import { runResearchCall, ResearchError, type ProviderConfig } from "@/lib/llm";
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
@@ -62,6 +62,15 @@ export async function POST(request: Request) {
     console.log(`[research] api key source: ${headerKey ? "header" : "env"}`);
   }
 
+  // Phase 2: synthetic Anthropic-only config. Phase 3 will call selectProvider with
+  // all three keys and support Kimi + EXA routing.
+  const config: ProviderConfig = {
+    provider: "anthropic",
+    searchBackend: "native",
+    llmKey: apiKey,
+    exaKey: null,
+  };
+
   const company = await findOrCreateCompany(body.name, body.domain ?? null);
 
   const stream = new ReadableStream<Uint8Array>({
@@ -95,7 +104,7 @@ export async function POST(request: Request) {
         // Pre-research disambiguation: lock in ONE canonical identity so
         // every parallel section researches the same entity.
         const disambig = await disambiguateCompany({
-          apiKey,
+          config,
           name: company.display_name,
           domain: company.domain,
         });
@@ -121,7 +130,7 @@ export async function POST(request: Request) {
         };
 
         const tasks = SECTIONS.map((section) =>
-          runOneSection({ apiKey, section, companyInput, companyId: company.id, send, abort, force: body.force })
+          runOneSection({ config, section, companyInput, companyId: company.id, send, abort, force: body.force })
         );
         await Promise.allSettled(tasks);
         await touchLastRefreshed(company.id).catch(() => undefined);
@@ -149,7 +158,7 @@ export async function POST(request: Request) {
 }
 
 type RunSectionArgs = {
-  apiKey: string;
+  config: ProviderConfig;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   section: SectionDefinition<any>;
   companyInput: CompanyInput;
@@ -160,7 +169,7 @@ type RunSectionArgs = {
 };
 
 async function runOneSection(args: RunSectionArgs) {
-  const { apiKey, section, companyInput, companyId, send, abort, force } = args;
+  const { config, section, companyInput, companyId, send, abort, force } = args;
   const sectionKey = section.key;
   send("section_started", { section_key: sectionKey });
 
@@ -185,7 +194,7 @@ async function runOneSection(args: RunSectionArgs) {
 
     const basePrompt = section.buildPrompt(companyInput);
     const result = await callAndValidate({
-      apiKey,
+      config,
       section,
       prompt: basePrompt,
     });
@@ -226,18 +235,17 @@ async function runOneSection(args: RunSectionArgs) {
 }
 
 type CallAndValidateArgs = {
-  apiKey: string;
+  config: ProviderConfig;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   section: SectionDefinition<any>;
   prompt: string;
 };
 
 async function callAndValidate(args: CallAndValidateArgs) {
-  const { apiKey, section, prompt } = args;
+  const { config, section, prompt } = args;
   const result = await runResearchCall({
-    apiKey,
-    model: section.model,
-    webSearchVersion: section.webSearchVersion,
+    config,
+    tier: section.tier,
     prompt,
     schema: section.outputSchema,
   });

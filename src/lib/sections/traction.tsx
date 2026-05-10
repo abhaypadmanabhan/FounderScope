@@ -3,7 +3,6 @@ import { z } from "zod";
 import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { SectionDefinition, RendererProps } from "./types";
-import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
 import { SectionShell } from "@/components/section-shell";
 import { ConfidenceDot, type ConfidenceVariant } from "@/components/confidence-dot";
@@ -342,8 +341,7 @@ export const traction: SectionDefinition<Output> = {
   order: 6,
   cacheTtlDays: 7,
   schemaVersion: 2,
-  model: DEFAULT_MODEL,
-  webSearchVersion: DEFAULT_WEB_SEARCH,
+  tier: "default",
   buildPrompt: (c) =>
     buildSectionPrompt({
       company: c,
