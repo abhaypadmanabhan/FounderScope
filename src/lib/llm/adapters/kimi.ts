@@ -21,11 +21,12 @@ import type {
   BetaMessage,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { RunArgs, RunResult, ModelTier } from "../types";
+import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
 import { EXA_SEARCH_TOOL, handleExaSearch } from "../tools/exa-search";
 import { parseFinal, mapSdkError, withRetry } from "../shared";
 
-const TIMEOUT_MS = 60_000;
+const TIMEOUT_MS = 120_000; // Kimi is slower than Claude; bumped from 60s.
 const KIMI_BASE_URL = "https://api.moonshot.ai/anthropic";
 const isDev = process.env.NODE_ENV !== "production";
 
@@ -73,7 +74,8 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   // eslint-disable-next-line prefer-const
   let response!: BetaMessage;
   let safety = 0;
-  const MAX_TURNS = 12;
+  const MAX_TURNS = 16; // Bumped from 12 — Kimi uses more turns than Claude.
+  const exaBudget = { used: 0 };
 
   try {
     while (true) {
@@ -132,13 +134,33 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
           );
         }
 
+        const budget = EXA_BUDGET[tier];
         const toolResults = await Promise.all(
-          exaCalls.map(async (call) => ({
-            type: "tool_result",
-            tool_use_id: call.id,
-            content: await handleExaSearch(call.input, config.exaKey!),
-          })),
+          exaCalls.map(async (call, idx) => {
+            const callNumber = exaBudget.used + idx;
+            if (callNumber >= budget) {
+              // Over budget — return a synthetic exhausted result without calling EXA.
+              return {
+                type: "tool_result",
+                tool_use_id: call.id,
+                content: JSON.stringify({
+                  error: "exa_search budget exhausted",
+                  message:
+                    "Write your final JSON answer now using prior search results. Do not call exa_search again.",
+                  results: [],
+                }),
+              };
+            }
+            return {
+              type: "tool_result",
+              tool_use_id: call.id,
+              content: await handleExaSearch(call.input, config.exaKey!),
+            };
+          }),
         );
+        // Advance the counter by how many calls were actually within budget.
+        exaBudget.used += Math.min(exaCalls.length, Math.max(0, budget - exaBudget.used));
+
         messages.push({ role: "assistant", content: response.content });
         messages.push({ role: "user", content: toolResults });
         continue;

@@ -7,6 +7,7 @@ import type {
   BetaMessage,
 } from "@anthropic-ai/sdk/resources/beta/messages/messages";
 import type { RunArgs, RunResult, ModelTier } from "../types";
+import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
 import { EXA_SEARCH_TOOL, handleExaSearch } from "../tools/exa-search";
 import { parseFinal, mapSdkError, withRetry } from "../shared";
@@ -55,6 +56,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   let response!: BetaMessage;
   let safety = 0;
   const MAX_TURNS = 12;
+  const exaBudget = { used: 0 };
 
   try {
     while (true) {
@@ -81,7 +83,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       }
 
       if (response.stop_reason === "tool_use") {
-        const handled = await handleToolUse(response, config.exaKey, messages);
+        const handled = await handleToolUse(response, config.exaKey, messages, tier, exaBudget);
         if (handled === "unknown_tool") {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const unknown = response.content?.find((b: any) => b.type === "tool_use" && b.name !== "web_search" && b.name !== "code_execution");
@@ -153,10 +155,19 @@ function buildTools(args: RunArgs<unknown>, useReasoning: boolean) {
 // silently dropped and the next API call would fail.
 const ALLOWED_TOOL_NAMES = new Set(["exa_search", "web_search", "code_execution"]);
 
+const EXA_BUDGET_EXHAUSTED_RESULT = JSON.stringify({
+  error: "exa_search budget exhausted",
+  message:
+    "Write your final JSON answer now using prior search results. Do not call exa_search again.",
+  results: [],
+});
+
 async function handleToolUse(
   response: BetaMessage,
   exaKey: string | null,
   messages: Array<{ role: string; content: unknown }>,
+  tier: ModelTier,
+  exaBudget: { used: number },
 ): Promise<"server_handled" | "exa_handled" | "unknown_tool"> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const blocks = (response.content ?? []) as any[];
@@ -179,13 +190,30 @@ async function handleToolUse(
         {},
       );
     }
+
+    const budget = EXA_BUDGET[tier];
     const toolResults = await Promise.all(
-      exaCalls.map(async (call) => ({
-        type: "tool_result",
-        tool_use_id: call.id,
-        content: await handleExaSearch(call.input, exaKey),
-      })),
+      exaCalls.map(async (call, idx) => {
+        const callNumber = exaBudget.used + idx;
+        if (callNumber >= budget) {
+          // Over budget — return a synthetic exhausted result without calling EXA.
+          return {
+            type: "tool_result",
+            tool_use_id: call.id,
+            content: EXA_BUDGET_EXHAUSTED_RESULT,
+          };
+        }
+        return {
+          type: "tool_result",
+          tool_use_id: call.id,
+          content: await handleExaSearch(call.input, exaKey),
+        };
+      }),
     );
+
+    // Advance the counter by how many calls were actually within budget.
+    exaBudget.used += Math.min(exaCalls.length, Math.max(0, budget - exaBudget.used));
+
     messages.push({ role: "assistant", content: response.content });
     messages.push({ role: "user", content: toolResults });
     return "exa_handled";

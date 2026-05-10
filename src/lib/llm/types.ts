@@ -5,6 +5,13 @@ export type ProviderId = "anthropic" | "kimi";
 export type SearchBackend = "native" | "exa";
 export type ModelTier = "default" | "reasoning";
 
+// Per-section EXA budget. Hard cap regardless of provider — protects
+// monthly EXA quota and forces model to converge instead of search-forever.
+export const EXA_BUDGET: Record<ModelTier, number> = {
+  default: 8,
+  reasoning: 10,
+} as const;
+
 export interface Keys {
   anthropic: string | null;
   kimi: string | null;

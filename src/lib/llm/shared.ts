@@ -19,11 +19,34 @@ const isDev = process.env.NODE_ENV !== "production";
 // extractJson
 // ---------------------------------------------------------------------------
 
-/** Strip code fences and trim leading/trailing non-JSON characters. */
+/** Strip code fences and trim leading/trailing non-JSON characters.
+ *
+ * Handles:
+ * - Plain JSON (no fences)
+ * - Fenced JSON with prose preamble (model writes "Here is my answer:\n```json\n{...}\n```")
+ * - Fenced JSON with prose after the fence (rare)
+ * - Multiple fenced blocks — extracts the LAST one (likely the final answer, not an example)
+ * - No fence with prose preamble — brace-trim fallback
+ */
 export function extractJson(text: string): string {
   let s = text.trim();
-  const fenceMatch = s.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?```\s*$/);
-  if (fenceMatch) s = fenceMatch[1].trim();
+
+  // Find ALL code fence blocks (```) anywhere in the text.
+  // We look for the LAST one because models often write preamble or
+  // examples before the actual answer.
+  const fenceRegex = /```(?:json)?\s*\n?([\s\S]*?)\n?```/g;
+  let lastFenceContent: string | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = fenceRegex.exec(s)) !== null) {
+    lastFenceContent = match[1].trim();
+  }
+
+  if (lastFenceContent !== null) {
+    s = lastFenceContent;
+  }
+
+  // Brace-trim fallback: strip leading prose before first { or [
+  // and trailing prose after last } or ]
   const firstBrace = s.search(/[\{\[]/);
   if (firstBrace > 0) s = s.slice(firstBrace);
   const lastBrace = Math.max(s.lastIndexOf("}"), s.lastIndexOf("]"));

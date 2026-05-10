@@ -8,8 +8,10 @@ export const EXA_SEARCH_TOOL = {
   name: "exa_search",
   description:
     "Search the public web. Returns a list of {title, url, highlights} hits. " +
-    "Use this for company facts, founder bios, funding rounds, news. " +
-    "When you cite a fact in your output's `claims`, use the URL from these results.",
+    "Use for company facts, founder bios, funding rounds, news. " +
+    "When you cite a fact in your output's `claims`, use the URL from these results. " +
+    "Budget: aim for 3-5 searches per task. Quality matters more than quantity. " +
+    "After gathering enough information, stop searching and write the final JSON answer.",
   input_schema: {
     type: "object" as const,
     properties: {
