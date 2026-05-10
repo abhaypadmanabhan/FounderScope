@@ -95,14 +95,18 @@ export default function CompanyPage({ params }: PageProps) {
         }
 
         // Cache miss (404), empty shell, or forced refresh — kick off research.
-        const apiKey = typeof window !== "undefined"
-          ? window.localStorage.getItem("anthropic_api_key")
-          : null;
+        const keys = typeof window !== "undefined"
+          ? {
+              anthropic: window.localStorage.getItem("anthropic_api_key"),
+              kimi: window.localStorage.getItem("kimi_api_key"),
+              exa: window.localStorage.getItem("exa_api_key"),
+            }
+          : { anthropic: null, kimi: null, exa: null };
 
         setPhase("researching");
         await runResearch({
           slug,
-          apiKey,
+          keys,
           force: isRefresh,
           signal: abort.signal,
           onCompany: (c) => setCompany(c),
@@ -115,7 +119,8 @@ export default function CompanyPage({ params }: PageProps) {
             logVisit(slug);
           },
           onError: (msg) => {
-            if (msg === "missing_key") {
+            if (msg === "missing_key" || msg === "missing_search_key") {
+              setErrorMsg(msg);
               setPhase("needs_key");
               return;
             }
@@ -207,11 +212,20 @@ export default function CompanyPage({ params }: PageProps) {
               color: "var(--text)",
             }}
           >
-            Set your Anthropic API key in{" "}
-            <Link className="underline font-medium" href="/settings">
-              /settings
-            </Link>{" "}
-            to research new companies. Cached reports load without a key.
+            {errorMsg === "missing_search_key" ? (
+              <>
+                Kimi requires an EXA key for web search. Add an EXA key in{" "}
+                <Link className="underline font-medium" href="/settings">/settings</Link>.
+              </>
+            ) : (
+              <>
+                Set your Anthropic or Kimi API key in{" "}
+                <Link className="underline font-medium" href="/settings">
+                  /settings
+                </Link>{" "}
+                to research new companies. Cached reports load without a key.
+              </>
+            )}
           </div>
         )}
 
@@ -280,7 +294,7 @@ export default function CompanyPage({ params }: PageProps) {
 
 type RunResearchArgs = {
   slug: string;
-  apiKey: string | null;
+  keys: { anthropic: string | null; kimi: string | null; exa: string | null };
   force: boolean;
   signal: AbortSignal;
   onCompany: (c: Company) => void;
@@ -294,9 +308,11 @@ function humanizeSlug(s: string): string {
 }
 
 async function runResearch(args: RunResearchArgs) {
-  const { slug, apiKey, force, signal, onCompany, onSection, onDone, onError } = args;
+  const { slug, keys, force, signal, onCompany, onSection, onDone, onError } = args;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (apiKey) headers["x-anthropic-key"] = apiKey;
+  if (keys.anthropic) headers["x-anthropic-key"] = keys.anthropic;
+  if (keys.kimi) headers["x-kimi-key"] = keys.kimi;
+  if (keys.exa) headers["x-exa-key"] = keys.exa;
 
   const res = await fetch("/api/research", {
     method: "POST",
@@ -309,6 +325,17 @@ async function runResearch(args: RunResearchArgs) {
     if (res.status === 401) {
       onError("missing_key");
       return;
+    }
+    if (res.status === 400) {
+      try {
+        const body = await res.clone().json();
+        if (body.error === "missing_search_key") {
+          onError("missing_search_key");
+          return;
+        }
+      } catch {
+        /* fall through */
+      }
     }
     onError(`Research call failed: ${res.status}`);
     return;

@@ -1,5 +1,3 @@
-// Settings — Anthropic API key (BYOK). Stored client-side in localStorage,
-// sent as x-anthropic-key header from src/app/company/[slug]/page.tsx on fresh research.
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,39 +5,52 @@ import { Eye, EyeOff, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { selectProvider } from "@/lib/llm";
 
-const STORAGE_KEY = "anthropic_api_key";
+const FIELDS = [
+  {
+    storageKey: "anthropic_api_key",
+    label: "Anthropic API key",
+    placeholder: "sk-ant-…",
+    href: "https://console.anthropic.com/settings/keys",
+    validate: (v: string) => v.startsWith("sk-ant-") && v.length > 20,
+  },
+  {
+    storageKey: "kimi_api_key",
+    label: "Kimi API key",
+    placeholder: "sk-…",
+    href: "https://platform.moonshot.ai/console/api-keys",
+    validate: (v: string) => v.length > 10,
+  },
+  {
+    storageKey: "exa_api_key",
+    label: "EXA API key",
+    placeholder: "Exa key…",
+    href: "https://dashboard.exa.ai",
+    validate: (v: string) => v.length > 10,
+  },
+] as const;
 
 export default function SettingsPage() {
-  const [stored, setStored] = useState<string | null>(null);
-  const [draft, setDraft] = useState("");
-  const [reveal, setReveal] = useState(false);
+  const [keys, setKeys] = useState<Record<string, string>>({});
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const v = window.localStorage.getItem(STORAGE_KEY);
-    setStored(v);
-    setDraft(v ?? "");
+    const loaded: Record<string, string> = {};
+    for (const f of FIELDS) {
+      loaded[f.storageKey] = window.localStorage.getItem(f.storageKey) ?? "";
+    }
+    setKeys(loaded);
     setHydrated(true);
   }, []);
 
-  const dirty = hydrated && draft.trim() !== (stored ?? "");
-  const valid = draft.trim().startsWith("sk-ant-") && draft.trim().length > 20;
-
-  const handleSave = () => {
-    const trimmed = draft.trim();
-    if (!trimmed) return;
-    window.localStorage.setItem(STORAGE_KEY, trimmed);
-    setStored(trimmed);
-    toast.success("API key saved");
-  };
-
-  const handleClear = () => {
-    window.localStorage.removeItem(STORAGE_KEY);
-    setStored(null);
-    setDraft("");
-    toast.success("API key cleared");
-  };
+  const routing = hydrated
+    ? selectProvider({
+        anthropic: keys["anthropic_api_key"] || null,
+        kimi: keys["kimi_api_key"] || null,
+        exa: keys["exa_api_key"] || null,
+      })
+    : null;
 
   return (
     <main className="mx-auto max-w-xl px-8 py-14">
@@ -49,7 +60,7 @@ export default function SettingsPage() {
           className="font-serif"
           style={{ fontSize: 34, lineHeight: 1.1, color: "var(--text)" }}
         >
-          Your Anthropic key
+          API keys
         </h1>
         <p
           className="mt-3 text-sm"
@@ -60,77 +71,119 @@ export default function SettingsPage() {
         </p>
       </header>
 
-      <section className="space-y-3">
-        <label
-          htmlFor="anthropic-key"
-          className="block text-xs"
-          style={{ color: "var(--text-faint)", letterSpacing: "0.04em" }}
-        >
-          API KEY
-        </label>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Input
-              id="anthropic-key"
-              type={reveal ? "text" : "password"}
-              autoComplete="off"
-              spellCheck={false}
-              placeholder="sk-ant-…"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              className="pr-9 font-mono text-xs"
-              aria-invalid={draft.length > 0 && !valid ? true : undefined}
-            />
-            <button
-              type="button"
-              onClick={() => setReveal((v) => !v)}
-              aria-label={reveal ? "Hide key" : "Show key"}
-              className="absolute inset-y-0 right-2 flex items-center"
-              style={{ color: "var(--text-faint)" }}
-            >
-              {reveal ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-          </div>
-          <Button
-            onClick={handleSave}
-            disabled={!dirty || !valid}
-            size="sm"
-          >
-            Save
-          </Button>
-          {stored && (
-            <Button
-              onClick={handleClear}
-              variant="outline"
-              size="sm"
-            >
-              Clear
-            </Button>
-          )}
-        </div>
-
-        {draft.length > 0 && !valid && (
-          <p className="text-xs" style={{ color: "hsl(var(--destructive))" }}>
-            Anthropic keys start with <code className="font-mono">sk-ant-</code>.
-          </p>
-        )}
-
-        <p className="text-xs" style={{ color: "var(--text-quiet)" }}>
-          {stored ? "A key is saved on this device." : "No key saved on this device."}{" "}
-          Cached reports load without one.
-        </p>
-
-        <a
-          href="https://console.anthropic.com/settings/keys"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 text-xs underline-offset-4 hover:underline"
-          style={{ color: "var(--text-faint)" }}
-        >
-          Get a key from console.anthropic.com
-          <ExternalLink size={11} />
-        </a>
+      <section className="space-y-8">
+        {FIELDS.map((f) => (
+          <KeyField
+            key={f.storageKey}
+            field={f}
+            value={keys[f.storageKey] ?? ""}
+            onChange={(v) => setKeys((s) => ({ ...s, [f.storageKey]: v }))}
+            onSave={(v) => {
+              window.localStorage.setItem(f.storageKey, v);
+              toast.success(`${f.label} saved`);
+            }}
+            onClear={() => {
+              window.localStorage.removeItem(f.storageKey);
+              setKeys((s) => ({ ...s, [f.storageKey]: "" }));
+              toast.success(`${f.label} cleared`);
+            }}
+          />
+        ))}
       </section>
+
+      {hydrated && routing && (
+        <p
+          className="mt-10 text-xs"
+          style={{ color: "var(--text-quiet)" }}
+        >
+          {routing.ok
+            ? `Active: ${routing.config.provider} + ${routing.config.searchBackend === "exa" ? "EXA" : "native search"}`
+            : `Not configured: ${routing.message}`}
+        </p>
+      )}
     </main>
+  );
+}
+
+interface FieldDef {
+  storageKey: string;
+  label: string;
+  placeholder: string;
+  href: string;
+  validate: (v: string) => boolean;
+}
+
+function KeyField({
+  field,
+  value,
+  onChange,
+  onSave,
+  onClear,
+}: {
+  field: FieldDef;
+  value: string;
+  onChange: (v: string) => void;
+  onSave: (v: string) => void;
+  onClear: () => void;
+}) {
+  const [reveal, setReveal] = useState(false);
+  const trimmed = value.trim();
+  const valid = trimmed.length === 0 || field.validate(trimmed);
+  const dirty = trimmed.length > 0; // simplification: "save if input has content"
+
+  return (
+    <div>
+      <label
+        htmlFor={field.storageKey}
+        className="block text-xs mb-2"
+        style={{ color: "var(--text-faint)", letterSpacing: "0.04em" }}
+      >
+        {field.label.toUpperCase()}
+      </label>
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Input
+            id={field.storageKey}
+            type={reveal ? "text" : "password"}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={field.placeholder}
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="pr-9 font-mono text-xs"
+            aria-invalid={value.length > 0 && !valid ? true : undefined}
+          />
+          <button
+            type="button"
+            onClick={() => setReveal((r) => !r)}
+            aria-label={reveal ? "Hide key" : "Show key"}
+            className="absolute inset-y-0 right-2 flex items-center"
+            style={{ color: "var(--text-faint)" }}
+          >
+            {reveal ? <EyeOff size={14} /> : <Eye size={14} />}
+          </button>
+        </div>
+        <Button
+          onClick={() => onSave(trimmed)}
+          disabled={!dirty || !valid}
+          size="sm"
+        >
+          Save
+        </Button>
+        <Button onClick={onClear} variant="outline" size="sm">
+          Clear
+        </Button>
+      </div>
+      <a
+        href={field.href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="mt-2 inline-flex items-center gap-1 text-xs underline-offset-4 hover:underline"
+        style={{ color: "var(--text-faint)" }}
+      >
+        Get a key →
+        <ExternalLink size={11} />
+      </a>
+    </div>
   );
 }

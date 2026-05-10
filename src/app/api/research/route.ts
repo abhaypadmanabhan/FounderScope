@@ -10,7 +10,7 @@ import {
   updateCompanyCanonical,
 } from "@/lib/companies";
 import { getCachedSection, upsertCachedSection } from "@/lib/cache";
-import { runResearchCall, ResearchError, type ProviderConfig } from "@/lib/llm";
+import { runResearchCall, ResearchError, selectProvider, type ProviderConfig, type Keys } from "@/lib/llm";
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
@@ -25,9 +25,17 @@ const bodySchema = z.object({
 });
 
 export async function POST(request: Request) {
-  const headerKey = request.headers.get("x-anthropic-key");
-  const envKey = process.env.ANTHROPIC_API_KEY;
-  const apiKey = headerKey || envKey;
+  const headerKeys: Keys = {
+    anthropic: request.headers.get("x-anthropic-key"),
+    kimi: request.headers.get("x-kimi-key"),
+    exa: request.headers.get("x-exa-key"),
+  };
+  const keys: Keys = {
+    anthropic: headerKeys.anthropic ?? process.env.ANTHROPIC_API_KEY ?? null,
+    kimi: headerKeys.kimi ?? process.env.KIMI_API_KEY ?? null,
+    exa: headerKeys.exa ?? process.env.EXA_API_KEY ?? null,
+  };
+
   let body: z.infer<typeof bodySchema>;
   try {
     body = bodySchema.parse(await request.json());
@@ -49,27 +57,23 @@ export async function POST(request: Request) {
     });
   }
 
-  if (!apiKey) {
+  const selected = selectProvider(keys);
+  if (!selected.ok) {
+    const status = selected.error === "missing_api_key" ? 401 : 400;
     return new Response(
-      JSON.stringify({
-        error: "missing_api_key",
-        message: "Provide x-anthropic-key header or set ANTHROPIC_API_KEY in env.",
-      }),
-      { status: 401, headers: { "content-type": "application/json" } }
+      JSON.stringify({ error: selected.error, message: selected.message }),
+      { status, headers: { "content-type": "application/json" } },
     );
   }
-  if (process.env.NODE_ENV !== "production") {
-    console.log(`[research] api key source: ${headerKey ? "header" : "env"}`);
-  }
+  const config = selected.config;
 
-  // Phase 2: synthetic Anthropic-only config. Phase 3 will call selectProvider with
-  // all three keys and support Kimi + EXA routing.
-  const config: ProviderConfig = {
-    provider: "anthropic",
-    searchBackend: "native",
-    llmKey: apiKey,
-    exaKey: null,
-  };
+  if (process.env.NODE_ENV !== "production") {
+    console.log(
+      `[research] provider=${config.provider} search=${config.searchBackend} keySource=${
+        headerKeys[config.provider] ? "header" : "env"
+      }`,
+    );
+  }
 
   const company = await findOrCreateCompany(body.name, body.domain ?? null);
 

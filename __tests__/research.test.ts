@@ -232,6 +232,33 @@ describe("/api/research orchestrator", () => {
       if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
     }
   });
+
+  it("returns 400 missing_search_key when only Kimi key is provided", async () => {
+    const savedAnthropic = process.env.ANTHROPIC_API_KEY;
+    const savedKimi = process.env.KIMI_API_KEY;
+    const savedExa = process.env.EXA_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.KIMI_API_KEY;
+    delete process.env.EXA_API_KEY;
+    try {
+      const req = new Request("http://localhost/api/research", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-kimi-key": "km-test",
+        },
+        body: JSON.stringify({ name: "Stripe", domain: null }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error).toBe("missing_search_key");
+    } finally {
+      if (savedAnthropic !== undefined) process.env.ANTHROPIC_API_KEY = savedAnthropic;
+      if (savedKimi !== undefined) process.env.KIMI_API_KEY = savedKimi;
+      if (savedExa !== undefined) process.env.EXA_API_KEY = savedExa;
+    }
+  });
 });
 
 // ---- Helpers ----
