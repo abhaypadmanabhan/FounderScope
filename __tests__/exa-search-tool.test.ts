@@ -21,7 +21,7 @@ afterEach(() => {
   global.fetch = originalFetch;
 });
 
-import { EXA_SEARCH_TOOL, handleExaSearch } from "@/lib/llm/tools/exa-search";
+import { EXA_SEARCH_TOOL, handleExaSearch, openaiExaToolDef } from "@/lib/llm/tools/exa-search";
 
 describe("EXA_SEARCH_TOOL", () => {
   it("declares the expected schema for the tool-use loop", () => {
@@ -50,5 +50,19 @@ describe("handleExaSearch", () => {
     const out = await handleExaSearch({ query: "x" }, "exa-key");
     const parsed = JSON.parse(out);
     expect(parsed.error).toMatch(/EXA 500/);
+  });
+});
+
+describe("openaiExaToolDef", () => {
+  it("emits an OpenAI function-tool definition with strict json schema", () => {
+    const def = openaiExaToolDef();
+    expect(def.type).toBe("function");
+    expect(def.function.name).toBe("exa_search");
+    expect(def.function.parameters.type).toBe("object");
+    expect(def.function.parameters.required).toEqual(["query"]);
+    expect(def.function.parameters.properties.query.type).toBe("string");
+    expect(def.function.parameters.properties.num_results.type).toBe("integer");
+    // Description carries through so the model gets the same guidance.
+    expect(def.function.description).toMatch(/Search the public web/i);
   });
 });

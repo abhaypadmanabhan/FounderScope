@@ -22,6 +22,34 @@ export const EXA_SEARCH_TOOL = {
   },
 };
 
+/**
+ * OpenAI-compat tool definition for the Kimi adapter. Same name + schema as
+ * EXA_SEARCH_TOOL so the rest of the code path (handleExaSearch) stays shared.
+ */
+export function openaiExaToolDef() {
+  return {
+    type: "function" as const,
+    function: {
+      name: EXA_SEARCH_TOOL.name,
+      description: EXA_SEARCH_TOOL.description,
+      parameters: {
+        type: "object" as const,
+        properties: {
+          query: { type: "string" as const },
+          num_results: {
+            type: "integer" as const,
+            default: 5,
+            minimum: 1,
+            maximum: 10,
+          },
+        },
+        required: ["query"] as const,
+        additionalProperties: false,
+      },
+    },
+  };
+}
+
 export async function handleExaSearch(
   input: { query: string; num_results?: number },
   exaKey: string,
