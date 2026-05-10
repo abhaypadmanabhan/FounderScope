@@ -177,6 +177,155 @@ export function mapSdkError(
 }
 
 // ---------------------------------------------------------------------------
+// OpenAI-compat helpers (Kimi via api.moonshot.ai/v1)
+// ---------------------------------------------------------------------------
+
+/**
+ * Minimal shape of an OpenAI-compat ChatCompletion the Kimi adapter needs.
+ * We avoid importing the `openai` types here so this file stays SDK-agnostic
+ * for tests that don't pull the SDK in.
+ */
+export interface OpenAIChatCompletionLike {
+  id?: string;
+  model?: string;
+  choices: Array<{
+    index?: number;
+    finish_reason?: string;
+    message: {
+      role?: string;
+      content?: string | null;
+      tool_calls?: Array<{
+        id: string;
+        type: "function";
+        function: { name: string; arguments: string };
+      }>;
+    };
+  }>;
+  usage?: {
+    prompt_tokens?: number;
+    completion_tokens?: number;
+    total_tokens?: number;
+    cached_tokens?: number;
+    prompt_cache_hit_tokens?: number;
+  };
+}
+
+/**
+ * Parse the final assistant message of an OpenAI-compat completion. Strict
+ * json_schema mode SHOULD make `JSON.parse(content)` succeed; we still run
+ * `extractJson` as a guard, then validate with Zod (matches `parseFinal`'s
+ * contract for the Anthropic path).
+ */
+export function parseFinalOpenAI<T>(
+  response: OpenAIChatCompletionLike,
+  schema: ZodType<T>,
+  resolvedModel: string,
+  logPrefix: string,
+): RunResult<T> {
+  const content = response.choices?.[0]?.message?.content ?? "";
+  if (!content.trim()) {
+    if (isDev) {
+      console.error(`[${logPrefix}] no content in final response`, {
+        model: resolvedModel,
+        finish_reason: response.choices?.[0]?.finish_reason,
+      });
+    }
+    throw new ResearchError("model_error", "no content in final response", {});
+  }
+
+  // Strict json_schema mode SHOULD make this branch take the fast path.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(content);
+  } catch {
+    // Defensive fallback: model accidentally fenced or prose-prefixed the
+    // output despite strict mode. Reuse extractJson for one retry before
+    // we surface a schema_validation failure.
+    const cleaned = extractJson(content);
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      if (isDev) {
+        console.error(
+          `[${logPrefix}] JSON parse failed (strict mode) for model`,
+          resolvedModel,
+          "text length",
+          content.length,
+        );
+      }
+      throw new ResearchError("schema_validation", "Model output is not valid JSON", {
+        raw: content,
+        cause: err,
+      });
+    }
+  }
+
+  try {
+    const data = schema.parse(parsed);
+    return { data, raw: content, modelVersion: response.model ?? resolvedModel };
+  } catch (err) {
+    if (err instanceof ZodError) {
+      if (isDev) {
+        console.error(`[${logPrefix}] schema_validation failure (openai)`, {
+          model: resolvedModel,
+          rawTextFirstChars: content.slice(0, 800),
+          rawTextLastChars: content.slice(-300),
+          rawTextLength: content.length,
+          zodIssues: err.issues.slice(0, 8),
+        });
+      }
+      throw new ResearchError(
+        "schema_validation",
+        `Zod schema validation failed: ${err.message}`,
+        { raw: content, cause: err },
+      );
+    }
+    throw err;
+  }
+}
+
+/**
+ * Map errors from the `openai` SDK (used against Moonshot's OpenAI-compat
+ * endpoint) to ResearchError categories. Mirrors `mapSdkError` for Anthropic.
+ *
+ * The `openai` SDK throws subclasses of `OpenAI.APIError` with a numeric
+ * `.status` field. Auth/RateLimit/Abort have dedicated subclasses, but we
+ * pattern-match on shape rather than instanceof so this stays mockable.
+ */
+export function mapOpenAIError(
+  err: unknown,
+  logPrefix: string,
+  timeoutMs: number,
+): ResearchError {
+  const e = err as { name?: string; status?: number; message?: string } | undefined;
+  if (e?.name === "AbortError" || e?.name === "APIUserAbortError") {
+    return new ResearchError(
+      "timeout",
+      `${logPrefix} call timed out after ${timeoutMs}ms`,
+      { cause: err },
+    );
+  }
+  if (e?.status === 401) {
+    return new ResearchError("auth_error", `Invalid ${logPrefix} API key`, { cause: err });
+  }
+  if (e?.status === 429) {
+    return new ResearchError("rate_limit", `${logPrefix} rate limit hit`, { cause: err });
+  }
+  if (typeof e?.status === "number") {
+    return new ResearchError(
+      "model_error",
+      `${logPrefix} API error (${e.status}): ${e.message ?? ""}`,
+      { cause: err },
+    );
+  }
+  return new ResearchError(
+    "model_error",
+    `Unexpected ${logPrefix} error: ${(err as Error)?.message ?? String(err)}`,
+    { cause: err },
+  );
+}
+
+// ---------------------------------------------------------------------------
 // withRetry
 // ---------------------------------------------------------------------------
 
