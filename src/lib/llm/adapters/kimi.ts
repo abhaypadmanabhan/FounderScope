@@ -1,48 +1,52 @@
-// Kimi K2.6 via the Anthropic-compat endpoint at api.moonshot.ai. Tool surface
-// is exa_search only — Kimi doesn't expose Anthropic's server-side web_search
-// or code_execution. selectProvider() guarantees exaKey is set when we get here.
+// Kimi adapter — runs against Moonshot's OpenAI-compatible endpoint
+// (https://api.moonshot.ai/v1) using the `openai` SDK. Tool surface is
+// EXA only; Kimi's $web_search builtin is intentionally rejected (see
+// docs/superpowers/specs/2026-05-10-kimi-k26-optimization-design.md).
 //
-// Model ID + baseURL source:
-//   Model ID "kimi-k2.6" confirmed at https://platform.kimi.ai/docs/guide/kimi-k2-6-quickstart
-//   (verified 2026-05-10; docs show "model": "kimi-k2.6" in all code examples).
-//   Plan placeholder used "kimi-k2-6" (hyphen) — corrected to "kimi-k2.6" (dot) per docs.
-//
-//   BaseURL "https://api.moonshot.ai/anthropic" is the plan placeholder. The public
-//   quickstart page only documents the OpenAI-compat endpoint (api.moonshot.ai/v1).
-//   The Anthropic-compat endpoint is referenced in the design spec at
-//   docs/superpowers/specs/2026-05-10-kimi-exa-support-design.md (line ~194):
-//   "https://api.moonshot.ai/anthropic/v1/messages", which means the baseURL to
-//   pass to the Anthropic SDK (which appends /v1/messages itself) is
-//   "https://api.moonshot.ai/anthropic". This matches the plan placeholder exactly.
-//   NOTE: Requires a live smoke-test against Moonshot's API to confirm the endpoint
-//   is active before merging Phase 1. See CONCERNS in Bundle 3 report.
-import Anthropic from "@anthropic-ai/sdk";
-import type {
-  BetaMessage,
-} from "@anthropic-ai/sdk/resources/beta/messages/messages";
+// selectProvider() guarantees exaKey is set when execution reaches here.
+import OpenAI from "openai";
+import { z } from "zod";
 import type { RunArgs, RunResult, ModelTier } from "../types";
 import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
-import { EXA_SEARCH_TOOL, handleExaSearch } from "../tools/exa-search";
-import { parseFinal, mapSdkError, withRetry } from "../shared";
+import { handleExaSearch, openaiExaToolDef } from "../tools/exa-search";
+import { mapOpenAIError, parseFinalOpenAI, withRetry } from "../shared";
 
-const TIMEOUT_MS = 120_000; // Kimi is slower than Claude; bumped from 60s.
-const KIMI_BASE_URL = "https://api.moonshot.ai/anthropic";
+const TIMEOUT_MS = 120_000;
+const KIMI_BASE_URL = "https://api.moonshot.ai/v1";
+const MAX_TURNS = 16;
 const isDev = process.env.NODE_ENV !== "production";
 
-// Single tier — Kimi K2.6 is the flagship across the board. If quality on moat
-// sections drops we can add a tier-specific switch later.
-const MODELS: Record<ModelTier, string> = {
-  default: "kimi-k2.6",   // confirmed at platform.kimi.ai/docs/guide/kimi-k2-6-quickstart (2026-05-10)
-  reasoning: "kimi-k2.6", // same model for both tiers; Kimi K2.6 has no separate reasoning variant
-};
-
-function maxTokensFor(tier: ModelTier): number {
-  return tier === "reasoning" ? 16384 : 8192;
+interface TierConfig {
+  model: string;
+  max_tokens: number;
+  temperature?: number;
+  thinking?: { type: "enabled" };
 }
 
+function tierConfig(tier: ModelTier): TierConfig {
+  if (tier === "reasoning") {
+    return {
+      model: "kimi-k2.6",
+      max_tokens: 16384,
+      thinking: { type: "enabled" },
+    };
+  }
+  return {
+    model: "kimi-k2-0905-preview",
+    max_tokens: 8192,
+    temperature: 0.2,
+  };
+}
+
+const EXA_BUDGET_EXHAUSTED_RESULT = JSON.stringify({
+  error: "exa_search budget exhausted",
+  message:
+    "Write your final JSON answer now using prior search results. Do not call exa_search again.",
+  results: [],
+});
+
 export async function runKimi<T>(args: RunArgs<T>): Promise<RunResult<T>> {
-  // Invariant: selectProvider should have rejected Kimi without EXA before reaching here.
   if (!args.config.exaKey) {
     throw new ResearchError(
       "model_error",
@@ -50,31 +54,59 @@ export async function runKimi<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       {},
     );
   }
-
   return withRetry(() => doCall(args));
 }
 
 async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
-  const { config, tier, prompt, schema } = args;
-  const model = MODELS[tier];
-  const maxTokens = maxTokensFor(tier);
+  const { config, tier, prompt, schema, cacheKey } = args;
+  const cfg = tierConfig(tier);
 
-  const client = new Anthropic({
+  const client = new OpenAI({
     apiKey: config.llmKey,
     baseURL: KIMI_BASE_URL,
+    maxRetries: 0,
   });
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const tools = [EXA_SEARCH_TOOL];
-  const messages: Array<{ role: string; content: unknown }> = [
+  const schemaName = cacheKey?.split(":").pop() || "section";
+  // zod-to-json-schema@3 targets zod v3; this project uses zod v4, which
+  // exposes a native `z.toJSONSchema()`. Output is OpenAPI/JSON-Schema-2020-12
+  // compatible — Moonshot's strict json_schema accepts this shape.
+  const jsonSchema = z.toJSONSchema(schema);
+  const responseFormat = {
+    type: "json_schema" as const,
+    json_schema: {
+      name: schemaName,
+      strict: true,
+      schema: jsonSchema,
+    },
+  };
+
+  const tools = [openaiExaToolDef()];
+  const messages: Array<Record<string, unknown>> = [
     { role: "user", content: prompt },
   ];
 
-  // eslint-disable-next-line prefer-const
-  let response!: BetaMessage;
+  let response!: {
+    id?: string;
+    model?: string;
+    choices: Array<{
+      index?: number;
+      finish_reason?: string;
+      message: {
+        role?: string;
+        content?: string | null;
+        tool_calls?: Array<{
+          id: string;
+          type: "function";
+          function: { name: string; arguments: string };
+        }>;
+      };
+    }>;
+  };
   let safety = 0;
-  const MAX_TURNS = 16; // Bumped from 12 — Kimi uses more turns than Claude.
   const exaBudget = { used: 0 };
 
   try {
@@ -84,94 +116,107 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
         throw new ResearchError("model_error", "exceeded max tool turns", {});
       }
 
+      const params: Record<string, unknown> = {
+        model: cfg.model,
+        max_tokens: cfg.max_tokens,
+        messages,
+        tools,
+        response_format: responseFormat,
+      };
+      if (cfg.temperature !== undefined) params.temperature = cfg.temperature;
+      if (cfg.thinking) params.thinking = cfg.thinking;
+      if (cacheKey) params.prompt_cache_key = cacheKey;
+
       try {
-        response = await client.beta.messages.create(
-          {
-            model,
-            max_tokens: maxTokens,
-            tools,
-            messages,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } as any,
-          { signal: controller.signal },
-        );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        response = await client.chat.completions.create(params as any, {
+          signal: controller.signal,
+        }) as unknown as typeof response;
       } catch (err) {
-        throw mapSdkError(err, "Kimi", TIMEOUT_MS);
+        throw mapOpenAIError(err, "Kimi", TIMEOUT_MS);
       }
 
-      if (
-        response.stop_reason === "end_turn" ||
-        response.stop_reason === "stop_sequence"
-      ) {
+      const choice = response.choices?.[0];
+      const finish = choice?.finish_reason;
+      const message = choice?.message;
+
+      if (finish === "stop" || finish === "length") {
         break;
       }
 
-      if (response.stop_reason === "tool_use") {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const blocks = (response.content ?? []) as any[];
-        const exaCalls = blocks.filter(
-          (b) => b.type === "tool_use" && b.name === "exa_search",
-        );
-
-        if (exaCalls.length === 0) {
-          // Kimi invoked a tool other than exa_search — unexpected.
-          const offendingNames = blocks
-            .filter((b) => b.type === "tool_use")
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .map((b: any) => b.name as string);
+      if (finish === "tool_calls") {
+        const toolCalls = message?.tool_calls ?? [];
+        if (toolCalls.length === 0) {
+          throw new ResearchError(
+            "model_error",
+            "Kimi returned finish_reason=tool_calls with no tool_calls",
+            {},
+          );
+        }
+        const offending = toolCalls.find((c) => c.function.name !== "exa_search");
+        if (offending) {
           if (isDev) {
             console.error("[kimi] model_error unexpected tool_use", {
-              model,
-              offendingNames,
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              contentBlockTypes: blocks.map((b: any) => b.type),
+              model: cfg.model,
+              offendingName: offending.function.name,
+              toolCallNames: toolCalls.map((c) => c.function.name),
             });
           }
           throw new ResearchError(
             "model_error",
-            `Kimi invoked unsupported tool(s): ${offendingNames.join(", ")}`,
+            `Kimi invoked unsupported tool: ${offending.function.name}`,
             {},
           );
         }
 
+        messages.push({
+          role: "assistant",
+          content: message?.content ?? null,
+          tool_calls: toolCalls,
+        });
+
         const budget = EXA_BUDGET[tier];
-        const toolResults = await Promise.all(
-          exaCalls.map(async (call, idx) => {
+        const toolReplies = await Promise.all(
+          toolCalls.map(async (call, idx) => {
             const callNumber = exaBudget.used + idx;
             if (callNumber >= budget) {
-              // Over budget — return a synthetic exhausted result without calling EXA.
               return {
-                type: "tool_result",
-                tool_use_id: call.id,
-                content: JSON.stringify({
-                  error: "exa_search budget exhausted",
-                  message:
-                    "Write your final JSON answer now using prior search results. Do not call exa_search again.",
-                  results: [],
-                }),
+                role: "tool" as const,
+                tool_call_id: call.id,
+                content: EXA_BUDGET_EXHAUSTED_RESULT,
               };
             }
+            let parsedArgs: { query: string; num_results?: number };
+            try {
+              parsedArgs = JSON.parse(call.function.arguments) as typeof parsedArgs;
+            } catch {
+              parsedArgs = { query: "" };
+            }
+            const content = await handleExaSearch(parsedArgs, config.exaKey!);
             return {
-              type: "tool_result",
-              tool_use_id: call.id,
-              content: await handleExaSearch(call.input, config.exaKey!),
+              role: "tool" as const,
+              tool_call_id: call.id,
+              content,
             };
           }),
         );
-        // Advance the counter by how many calls were actually within budget.
-        exaBudget.used += Math.min(exaCalls.length, Math.max(0, budget - exaBudget.used));
+        exaBudget.used += Math.min(
+          toolCalls.length,
+          Math.max(0, budget - exaBudget.used),
+        );
 
-        messages.push({ role: "assistant", content: response.content });
-        messages.push({ role: "user", content: toolResults });
+        for (const reply of toolReplies) {
+          messages.push(reply);
+        }
         continue;
       }
 
-      // max_tokens, refusal, or other stop reason — exit loop.
+      // Other finish_reasons fall through to parseFinalOpenAI for diagnosis.
       break;
     }
   } finally {
     clearTimeout(timer);
   }
 
-  return parseFinal(response, schema, model, "kimi");
+  return parseFinalOpenAI(response, schema, cfg.model, "kimi");
 }

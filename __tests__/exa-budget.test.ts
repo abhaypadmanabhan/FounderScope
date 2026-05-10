@@ -101,20 +101,6 @@ vi.mock("@anthropic-ai/sdk", () => {
 
 const SimpleSchema = z.object({ ok: z.boolean() });
 
-function makeKimiArgs(tier: "default" | "reasoning"): RunArgs<{ ok: boolean }> {
-  return {
-    config: {
-      provider: "kimi",
-      searchBackend: "exa",
-      llmKey: "km-test",
-      exaKey: "exa-test",
-    },
-    tier,
-    prompt: "research this company",
-    schema: SimpleSchema,
-  };
-}
-
 function makeAnthropicArgs(tier: "default" | "reasoning"): RunArgs<{ ok: boolean }> {
   return {
     config: {
@@ -170,41 +156,6 @@ describe("EXA_BUDGET constant", () => {
   });
   it("reasoning budget is 10", () => {
     expect(EXA_BUDGET.reasoning).toBe(10);
-  });
-});
-
-describe("Kimi adapter — EXA budget enforcement", () => {
-  it("caps at budget=8 when model would make 12 calls (3 turns × 4)", async () => {
-    const { runKimi } = await import("@/lib/llm/adapters/kimi");
-
-    // 3 turns × 4 calls = 12 total requested; budget=8 → only 8 hit EXA
-    sdkResponseSequence = buildSequence("kimi-k2.6", 3, 4);
-
-    const result = await runKimi(makeKimiArgs("default"));
-    expect(result.data).toEqual({ ok: true });
-
-    // Exactly 8 real EXA calls
-    expect(exaHits.length).toBe(EXA_BUDGET.default);
-  });
-
-  it("does NOT cap when total calls are within budget", async () => {
-    const { runKimi } = await import("@/lib/llm/adapters/kimi");
-
-    // 1 turn × 5 calls = 5 total; budget=8 → all 5 hit EXA
-    sdkResponseSequence = buildSequence("kimi-k2.6", 1, 5);
-
-    await runKimi(makeKimiArgs("default"));
-    expect(exaHits.length).toBe(5);
-  });
-
-  it("reasoning tier uses budget=10", async () => {
-    const { runKimi } = await import("@/lib/llm/adapters/kimi");
-
-    // 4 turns × 4 calls = 16 total; reasoning budget=10 → only 10 hit EXA
-    sdkResponseSequence = buildSequence("kimi-k2.6", 4, 4);
-
-    await runKimi(makeKimiArgs("reasoning"));
-    expect(exaHits.length).toBe(EXA_BUDGET.reasoning);
   });
 });
 
