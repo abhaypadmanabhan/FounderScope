@@ -201,16 +201,17 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("Kimi adapter — tier mapping", () => {
-  it("default tier → kimi-k2-0905-preview, temperature 0.2, max_tokens 8192, no thinking", async () => {
+  it("default tier → kimi-k2.5, max_tokens 8192, no thinking, no temperature (model forces 1.0)", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
-    chatResponseSequence = [stopResponse("kimi-k2-0905-preview")];
+    chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi(makeArgs("default"));
     expect(sdkCalls).toHaveLength(1);
     const p = sdkCalls[0].params;
-    expect(p.model).toBe("kimi-k2-0905-preview");
-    expect(p.temperature).toBe(0.2);
+    expect(p.model).toBe("kimi-k2.5");
     expect(p.max_tokens).toBe(8192);
     expect(p.thinking).toBeUndefined();
+    // K2.5 rejects custom temperature ("only 1 is allowed for this model").
+    expect(p.temperature).toBeUndefined();
   });
 
   it("reasoning tier → kimi-k2.6, max_tokens 16384, thinking.enabled, no temperature", async () => {
@@ -229,7 +230,7 @@ describe("Kimi adapter — tier mapping", () => {
 describe("Kimi adapter — strict json_schema + cache key", () => {
   it("passes prompt_cache_key from RunArgs.cacheKey", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
-    chatResponseSequence = [stopResponse("kimi-k2-0905-preview")];
+    chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi(makeArgs("default"));
     const p = sdkCalls[0].params;
     expect(p.prompt_cache_key).toBe("founderscope:section:snapshot");
@@ -237,7 +238,7 @@ describe("Kimi adapter — strict json_schema + cache key", () => {
 
   it("emits response_format json_schema strict from the Zod schema", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
-    chatResponseSequence = [stopResponse("kimi-k2-0905-preview")];
+    chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi(makeArgs("default"));
     const p = sdkCalls[0].params as Record<string, unknown>;
     const rf = p.response_format as {
@@ -252,7 +253,7 @@ describe("Kimi adapter — strict json_schema + cache key", () => {
 
   it("falls back json_schema name to 'section' when cacheKey is missing", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
-    chatResponseSequence = [stopResponse("kimi-k2-0905-preview")];
+    chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi({ ...makeArgs("default"), cacheKey: undefined });
     const p = sdkCalls[0].params as Record<string, unknown>;
     const rf = p.response_format as { json_schema: { name: string } };
@@ -262,7 +263,7 @@ describe("Kimi adapter — strict json_schema + cache key", () => {
 
   it("declares the EXA function tool", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
-    chatResponseSequence = [stopResponse("kimi-k2-0905-preview")];
+    chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi(makeArgs("default"));
     const p = sdkCalls[0].params as Record<string, unknown>;
     const tools = p.tools as Array<{ type: string; function: { name: string } }>;
@@ -273,7 +274,7 @@ describe("Kimi adapter — strict json_schema + cache key", () => {
 
   it("uses base URL https://api.moonshot.ai/v1 and disables SDK retries", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
-    chatResponseSequence = [stopResponse("kimi-k2-0905-preview")];
+    chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi(makeArgs("default"));
     expect(openaiCtorOpts).toHaveLength(1);
     const opts = openaiCtorOpts[0] as { baseURL?: string; maxRetries?: number; apiKey?: string };
@@ -291,10 +292,10 @@ describe("Kimi adapter — tool loop", () => {
   it("dispatches exa_search tool calls and continues until finish_reason=stop", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = [
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: "tc-1", name: "exa_search", args: { query: "stripe payments" } },
       ]),
-      stopResponse("kimi-k2-0905-preview"),
+      stopResponse("kimi-k2.5"),
     ];
     const result = await runKimi(makeArgs("default"));
     expect(result.data).toEqual({ ok: true });
@@ -307,7 +308,7 @@ describe("Kimi adapter — tool loop", () => {
   it("rejects unknown tool calls with model_error", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = [
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: "tc-1", name: "scan_filesystem", args: { path: "/" } },
       ]),
     ];
@@ -321,7 +322,7 @@ describe("Kimi adapter — tool loop", () => {
   it("throws model_error after MAX_TURNS=16 of tool calls", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = Array.from({ length: 17 }, (_, i) =>
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: `tc-${i}`, name: "exa_search", args: { query: `q-${i}` } },
       ]),
     );
@@ -336,7 +337,7 @@ describe("Kimi adapter — tool loop", () => {
     chatResponseSequence = [
       {
         id: "chatcmpl-empty-tools",
-        model: "kimi-k2-0905-preview",
+        model: "kimi-k2.5",
         choices: [
           {
             index: 0,
@@ -357,25 +358,25 @@ describe("Kimi adapter — EXA budget enforcement", () => {
   it("default tier caps at budget=8 even when 12 calls are made (3 turns × 4)", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = [
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: "a1", name: "exa_search", args: { query: "q1" } },
         { id: "a2", name: "exa_search", args: { query: "q2" } },
         { id: "a3", name: "exa_search", args: { query: "q3" } },
         { id: "a4", name: "exa_search", args: { query: "q4" } },
       ]),
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: "b1", name: "exa_search", args: { query: "q5" } },
         { id: "b2", name: "exa_search", args: { query: "q6" } },
         { id: "b3", name: "exa_search", args: { query: "q7" } },
         { id: "b4", name: "exa_search", args: { query: "q8" } },
       ]),
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: "c1", name: "exa_search", args: { query: "q9" } },
         { id: "c2", name: "exa_search", args: { query: "q10" } },
         { id: "c3", name: "exa_search", args: { query: "q11" } },
         { id: "c4", name: "exa_search", args: { query: "q12" } },
       ]),
-      stopResponse("kimi-k2-0905-preview"),
+      stopResponse("kimi-k2.5"),
     ];
     await runKimi(makeArgs("default"));
     expect(exaHits.length).toBe(EXA_BUDGET.default);
@@ -401,12 +402,12 @@ describe("Kimi adapter — EXA budget enforcement", () => {
   it("does not cap when calls stay under budget", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = [
-      toolCallResponse("kimi-k2-0905-preview", [
+      toolCallResponse("kimi-k2.5", [
         { id: "x1", name: "exa_search", args: { query: "q1" } },
         { id: "x2", name: "exa_search", args: { query: "q2" } },
         { id: "x3", name: "exa_search", args: { query: "q3" } },
       ]),
-      stopResponse("kimi-k2-0905-preview"),
+      stopResponse("kimi-k2.5"),
     ];
     await runKimi(makeArgs("default"));
     expect(exaHits.length).toBe(3);

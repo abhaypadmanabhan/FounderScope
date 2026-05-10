@@ -32,10 +32,17 @@ function tierConfig(tier: ModelTier): TierConfig {
       thinking: { type: "enabled" },
     };
   }
+  // Default tier is kimi-k2.5 per spec fallback note: kimi-k2-0905-preview
+  // returned 404 from Moonshot's /v1/models on smoke test (2026-05-10) and
+  // the spec ("K2.5 stays as a fallback if K2-0905 has stability issues")
+  // anticipated this. K2.5 has the same pricing and a 262k context window.
+  //
+  // K2.5 carries `supports_reasoning: true` and rejects custom temperature
+  // ("only 1 is allowed for this model"), so we omit the field — same posture
+  // as the reasoning tier. Strict json_schema + prompt_cache_key still apply.
   return {
-    model: "kimi-k2-0905-preview",
+    model: "kimi-k2.5",
     max_tokens: 8192,
-    temperature: 0.2,
   };
 }
 
