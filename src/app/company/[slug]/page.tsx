@@ -43,7 +43,7 @@ export default function CompanyPage({ params }: PageProps) {
 
   const [sections, setSections] = useState<Record<string, SectionState>>(initialMap);
   const [company, setCompany] = useState<Company | null>(null);
-  const [phase, setPhase] = useState<"loading" | "cached" | "researching" | "needs_key" | "done" | "error">("loading");
+  const [phase, setPhase] = useState<"loading" | "researching" | "needs_key" | "done" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [everCompleted, setEverCompleted] = useState(false);
@@ -189,7 +189,11 @@ export default function CompanyPage({ params }: PageProps) {
           {phase === "done" && (isRefresh ? "Re-researched · cache overwritten" : "Cached · loaded from store")}
           {phase === "researching" && (isRefresh ? "Re-researching live · streaming sections" : "Researching live · streaming sections")}
           {phase === "loading" && "Loading…"}
-          {phase === "needs_key" && "Anthropic API key required for fresh research"}
+          {phase === "needs_key" && (
+            errorMsg === "missing_search_key"
+              ? "EXA key required for Kimi search"
+              : "Anthropic API key required for fresh research"
+          )}
           {phase === "error" && (errorMsg ?? "Error")}
         </div>
         {hasCachedReport && (
