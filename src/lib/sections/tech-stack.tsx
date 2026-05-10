@@ -323,6 +323,7 @@ const SkeletonRenderer: React.FC = () => (
 
 export const techStack: SectionDefinition<Output> = {
   key: "tech_stack",
+  cacheKey: "founderscope:section:tech_stack",
   title: "Tech Stack & Build Cost",
   order: 4,
   cacheTtlDays: 14,

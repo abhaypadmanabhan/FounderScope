@@ -178,6 +178,7 @@ function renderWithCitations(text: string, citations: Citation[]): React.ReactNo
 
 export const snapshot: SectionDefinition<Output> = {
   key: "snapshot",
+  cacheKey: "founderscope:section:snapshot",
   title: "Snapshot",
   order: 1,
   cacheTtlDays: 30,

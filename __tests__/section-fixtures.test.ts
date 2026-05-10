@@ -34,3 +34,11 @@ describe("section schemas accept the anthropic fixture content", () => {
     });
   }
 });
+
+describe("each section declares a stable cacheKey", () => {
+  for (const section of SECTIONS) {
+    it(`${section.key} has cacheKey "founderscope:section:${section.key}"`, () => {
+      expect(section.cacheKey).toBe(`founderscope:section:${section.key}`);
+    });
+  }
+});

@@ -72,6 +72,7 @@ export function avatarTiers(f: Pick<Founder, "photo_url" | "github_url">): Avata
 
 export const founders: SectionDefinition<FoundersOutput> = {
   key: "founders",
+  cacheKey: "founderscope:section:founders",
   title: "Founders",
   order: 3,
   cacheTtlDays: 30,

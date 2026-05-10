@@ -361,6 +361,7 @@ const SkeletonRenderer: React.FC = () => (
 
 export const funding: SectionDefinition<Output> = {
   key: "funding",
+  cacheKey: "founderscope:section:funding",
   title: "Funding Journey",
   order: 5,
   cacheTtlDays: 14,

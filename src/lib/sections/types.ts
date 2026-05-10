@@ -51,6 +51,8 @@ export type RendererProps<T> = {
 
 export interface SectionDefinition<T = unknown> {
   key: string;
+  /** Stable Moonshot prompt_cache_key. Format: "founderscope:section:<key>". */
+  cacheKey: string;
   title: string;
   order: number;
   cacheTtlDays: number;

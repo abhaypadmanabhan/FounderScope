@@ -380,6 +380,7 @@ const SkeletonRenderer: React.FC = () => (
 
 export const market: SectionDefinition<Output> = {
   key: "market",
+  cacheKey: "founderscope:section:market",
   title: "Market & Competition",
   order: 7,
   cacheTtlDays: 14,

@@ -446,6 +446,7 @@ const SkeletonRenderer: React.FC = () => (
 
 export const moat: SectionDefinition<Output> = {
   key: "moat",
+  cacheKey: "founderscope:section:moat",
   title: "Moat & Replicability",
   order: 2,
   cacheTtlDays: 30,

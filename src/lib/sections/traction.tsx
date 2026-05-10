@@ -337,6 +337,7 @@ const SkeletonRenderer: React.FC = () => (
 
 export const traction: SectionDefinition<Output> = {
   key: "traction",
+  cacheKey: "founderscope:section:traction",
   title: "Traction",
   order: 6,
   cacheTtlDays: 7,
