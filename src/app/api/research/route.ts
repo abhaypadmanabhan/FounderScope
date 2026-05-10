@@ -21,6 +21,7 @@ export const dynamic = "force-dynamic";
 const bodySchema = z.object({
   name: z.string().min(1),
   domain: z.string().nullable().optional(),
+  force: z.boolean().optional().default(false),
 });
 
 export async function POST(request: Request) {
@@ -120,7 +121,7 @@ export async function POST(request: Request) {
         };
 
         const tasks = SECTIONS.map((section) =>
-          runOneSection({ apiKey, section, companyInput, companyId: company.id, send, abort })
+          runOneSection({ apiKey, section, companyInput, companyId: company.id, send, abort, force: body.force })
         );
         await Promise.allSettled(tasks);
         await touchLastRefreshed(company.id).catch(() => undefined);
@@ -155,26 +156,29 @@ type RunSectionArgs = {
   companyId: string;
   send: (event: string, payload: unknown) => void;
   abort: AbortController;
+  force: boolean;
 };
 
 async function runOneSection(args: RunSectionArgs) {
-  const { apiKey, section, companyInput, companyId, send, abort } = args;
+  const { apiKey, section, companyInput, companyId, send, abort, force } = args;
   const sectionKey = section.key;
   send("section_started", { section_key: sectionKey });
 
   try {
-    const cached = await getCachedSection(companyId, section);
-    if (cached) {
-      send("section_completed", {
-        section_key: sectionKey,
-        content: cached.content,
-        citations: cached.citations,
-        model_version: cached.modelVersion,
-        status: deriveStatus(cached.citations),
-        citation_status: countCitationStatuses(cached.citations),
-        from_cache: true,
-      });
-      return;
+    if (!force) {
+      const cached = await getCachedSection(companyId, section);
+      if (cached) {
+        send("section_completed", {
+          section_key: sectionKey,
+          content: cached.content,
+          citations: cached.citations,
+          model_version: cached.modelVersion,
+          status: deriveStatus(cached.citations),
+          citation_status: countCitationStatuses(cached.citations),
+          from_cache: true,
+        });
+        return;
+      }
     }
 
     if (abort.signal.aborted) return;

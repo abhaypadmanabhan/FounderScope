@@ -18,12 +18,15 @@ import {
 } from "@/components/ui/sidebar";
 import { Logomark } from "./logomark";
 import { useSearchPalette } from "./search-palette-provider";
+import { useRecents } from "@/hooks/use-recents";
+import { formatRelative } from "@/lib/format";
 
 export function AppSidebar() {
   const pathname = usePathname();
   const { openPalette } = useSearchPalette();
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { entries: recents } = useRecents();
 
   const isHome = pathname === "/";
   const isSettings = pathname === "/settings";
@@ -107,15 +110,58 @@ export function AppSidebar() {
               Recently researched
             </SidebarGroupLabel>
             <SidebarGroupContent>
-              <div
-                className="px-3 py-2 text-xs italic"
-                style={{
-                  color: "var(--text-faint)",
-                  fontFamily: "var(--font-serif)",
-                }}
-              >
-                No recent searches yet.
-              </div>
+              {recents.length === 0 ? (
+                <div
+                  className="px-3 py-2 text-xs italic"
+                  style={{
+                    color: "var(--text-faint)",
+                    fontFamily: "var(--font-serif)",
+                  }}
+                >
+                  No recent searches yet.
+                </div>
+              ) : (
+                <SidebarMenu>
+                  {recents.map((r) => {
+                    const href = `/company/${r.slug}`;
+                    const active = pathname === href;
+                    return (
+                      <SidebarMenuItem key={r.slug}>
+                        <Link href={href}>
+                          <SidebarMenuButton
+                            isActive={active}
+                            tooltip={r.display_name}
+                            className="t-200"
+                          >
+                            <span
+                              className="serif truncate"
+                              style={{
+                                flex: 1,
+                                fontSize: 13,
+                                color: active ? "var(--text)" : "var(--text-soft)",
+                                letterSpacing: "-0.005em",
+                              }}
+                            >
+                              {r.display_name}
+                            </span>
+                            <span
+                              className="font-mono"
+                              style={{
+                                fontSize: 10,
+                                color: "var(--text-quiet)",
+                                letterSpacing: "0.04em",
+                                textTransform: "uppercase",
+                              }}
+                            >
+                              {formatRelative(r.searched_at)}
+                            </span>
+                          </SidebarMenuButton>
+                        </Link>
+                      </SidebarMenuItem>
+                    );
+                  })}
+                </SidebarMenu>
+              )}
             </SidebarGroupContent>
           </SidebarGroup>
         )}

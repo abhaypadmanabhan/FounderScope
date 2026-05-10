@@ -1,10 +1,12 @@
 // Company report page — wires SSE/cache state to per-section Renderers from the registry.
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { toast } from "sonner";
 import { SECTIONS } from "@/lib/sections/registry";
 import type { Citation, RendererCompany } from "@/lib/sections/types";
+import { RefreshButton } from "@/components/refresh-button";
 
 type SectionState =
   | { status: "pending" }
@@ -15,6 +17,20 @@ type Company = RendererCompany;
 
 interface PageProps {
   params: { slug: string };
+}
+
+function logVisit(slug: string) {
+  fetch("/api/search-history", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ slug }),
+  })
+    .then((res) => {
+      if (res.ok && typeof window !== "undefined") {
+        window.dispatchEvent(new Event("recents:updated"));
+      }
+    })
+    .catch(() => undefined);
 }
 
 export default function CompanyPage({ params }: PageProps) {
@@ -29,46 +45,56 @@ export default function CompanyPage({ params }: PageProps) {
   const [company, setCompany] = useState<Company | null>(null);
   const [phase, setPhase] = useState<"loading" | "cached" | "researching" | "needs_key" | "done" | "error">("loading");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [everCompleted, setEverCompleted] = useState(false);
+  const prevSectionsRef = useRef<Record<string, SectionState> | null>(null);
+  const isRefresh = refreshKey > 0;
+
   useEffect(() => {
     const abort = new AbortController();
 
     (async () => {
       try {
-        const cachedRes = await fetch(`/api/companies/${slug}`, { signal: abort.signal });
-        if (cachedRes.ok) {
-          const data = (await cachedRes.json()) as {
-            company: Company;
-            sections: Array<{
-              section_key: string;
-              content: unknown;
-              citations: unknown;
-              model_version: string;
-            }>;
-          };
-          setCompany(data.company);
-          if (data.sections && data.sections.length > 0) {
-            const map: Record<string, SectionState> = { ...initialMap };
-            for (const s of data.sections) {
-              map[s.section_key] = {
-                status: "completed",
-                content: s.content,
-                citations: s.citations,
-                modelVersion: s.model_version,
-                fromCache: true,
-              };
+        // Skip cache lookup on refresh — go straight to fresh research.
+        if (!isRefresh) {
+          const cachedRes = await fetch(`/api/companies/${slug}`, { signal: abort.signal });
+          if (cachedRes.ok) {
+            const data = (await cachedRes.json()) as {
+              company: Company;
+              sections: Array<{
+                section_key: string;
+                content: unknown;
+                citations: unknown;
+                model_version: string;
+              }>;
+            };
+            setCompany(data.company);
+            if (data.sections && data.sections.length > 0) {
+              const map: Record<string, SectionState> = { ...initialMap };
+              for (const s of data.sections) {
+                map[s.section_key] = {
+                  status: "completed",
+                  content: s.content,
+                  citations: s.citations,
+                  modelVersion: s.model_version,
+                  fromCache: true,
+                };
+              }
+              setSections(map);
+              setPhase("done");
+              setEverCompleted(true);
+              logVisit(slug);
+              return;
             }
-            setSections(map);
-            setPhase("done");
+            // Empty company shell with no sections — fall through to research.
+          } else if (cachedRes.status !== 404) {
+            setErrorMsg(`Failed to load: HTTP ${cachedRes.status}`);
+            setPhase("error");
             return;
           }
-          // Empty company shell with no sections — fall through to research.
-        } else if (cachedRes.status !== 404) {
-          setErrorMsg(`Failed to load: HTTP ${cachedRes.status}`);
-          setPhase("error");
-          return;
         }
 
-        // Cache miss (404) or empty shell — kick off research.
+        // Cache miss (404), empty shell, or forced refresh — kick off research.
         const apiKey = typeof window !== "undefined"
           ? window.localStorage.getItem("anthropic_api_key")
           : null;
@@ -77,35 +103,69 @@ export default function CompanyPage({ params }: PageProps) {
         await runResearch({
           slug,
           apiKey,
+          force: isRefresh,
           signal: abort.signal,
           onCompany: (c) => setCompany(c),
           onSection: (key, state) =>
             setSections((prev) => ({ ...prev, [key]: state })),
-          onDone: () => setPhase("done"),
+          onDone: () => {
+            setPhase("done");
+            setEverCompleted(true);
+            prevSectionsRef.current = null;
+            logVisit(slug);
+          },
           onError: (msg) => {
             if (msg === "missing_key") {
               setPhase("needs_key");
-            } else {
-              setErrorMsg(msg);
-              setPhase("error");
+              return;
             }
+            // Refresh failed mid-stream: restore prior cached sections so the page doesn't go blank.
+            if (isRefresh && prevSectionsRef.current) {
+              setSections(prevSectionsRef.current);
+              setPhase("done");
+              toast.error(`Re-research failed: ${msg}`);
+              prevSectionsRef.current = null;
+              return;
+            }
+            setErrorMsg(msg);
+            setPhase("error");
           },
         });
       } catch (err) {
         if ((err as Error)?.name === "AbortError") return;
-        setErrorMsg((err as Error)?.message ?? "Unknown error");
+        const msg = (err as Error)?.message ?? "Unknown error";
+        if (isRefresh && prevSectionsRef.current) {
+          setSections(prevSectionsRef.current);
+          setPhase("done");
+          toast.error(`Re-research failed: ${msg}`);
+          prevSectionsRef.current = null;
+          return;
+        }
+        setErrorMsg(msg);
         setPhase("error");
       }
     })();
 
     return () => abort.abort();
-  }, [slug, initialMap]);
+  }, [slug, initialMap, isRefresh, refreshKey]);
 
   const rendererCompany: Company = {
     slug,
     display_name: company?.display_name?.trim() || humanizeSlug(slug),
     domain: company?.domain ?? null,
   };
+
+  const handleRefresh = () => {
+    if (phase === "researching" || phase === "loading") return;
+    prevSectionsRef.current = sections;
+    setSections(initialMap);
+    setErrorMsg(null);
+    setPhase("researching");
+    setRefreshKey((n) => n + 1);
+  };
+
+  const refreshDisabled = phase === "researching" || phase === "loading" || phase === "needs_key";
+  const hasCachedReport = everCompleted;
 
   return (
     <div>
@@ -121,12 +181,20 @@ export default function CompanyPage({ params }: PageProps) {
           className="flex items-center gap-2.5 text-xs"
           style={{ color: "var(--text-faint)" }}
         >
-          {phase === "done" && "Cached · loaded from store"}
-          {phase === "researching" && "Researching live · streaming sections"}
+          {phase === "done" && (isRefresh ? "Re-researched · cache overwritten" : "Cached · loaded from store")}
+          {phase === "researching" && (isRefresh ? "Re-researching live · streaming sections" : "Researching live · streaming sections")}
           {phase === "loading" && "Loading…"}
           {phase === "needs_key" && "Anthropic API key required for fresh research"}
           {phase === "error" && (errorMsg ?? "Error")}
         </div>
+        {hasCachedReport && (
+          <RefreshButton
+            companyName={rendererCompany.display_name}
+            disabled={refreshDisabled}
+            busy={phase === "researching"}
+            onConfirm={handleRefresh}
+          />
+        )}
       </div>
 
       <main className="mx-auto max-w-[1080px] px-8 lg:px-14 pt-14 pb-12">
@@ -213,6 +281,7 @@ export default function CompanyPage({ params }: PageProps) {
 type RunResearchArgs = {
   slug: string;
   apiKey: string | null;
+  force: boolean;
   signal: AbortSignal;
   onCompany: (c: Company) => void;
   onSection: (key: string, state: SectionState) => void;
@@ -225,7 +294,7 @@ function humanizeSlug(s: string): string {
 }
 
 async function runResearch(args: RunResearchArgs) {
-  const { slug, apiKey, signal, onCompany, onSection, onDone, onError } = args;
+  const { slug, apiKey, force, signal, onCompany, onSection, onDone, onError } = args;
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   if (apiKey) headers["x-anthropic-key"] = apiKey;
 
@@ -233,7 +302,7 @@ async function runResearch(args: RunResearchArgs) {
     method: "POST",
     signal,
     headers,
-    body: JSON.stringify({ name: humanizeSlug(slug), domain: null }),
+    body: JSON.stringify({ name: humanizeSlug(slug), domain: null, force }),
   });
 
   if (!res.ok || !res.body) {

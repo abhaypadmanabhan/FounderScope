@@ -7,6 +7,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SearchPaletteProvider } from "@/components/search-palette-provider";
+import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
@@ -48,6 +49,7 @@ export default function RootLayout({
                 <main className="flex-1">{children}</main>
               </div>
             </SidebarProvider>
+            <Toaster richColors position="bottom-right" />
           </SearchPaletteProvider>
         </TooltipProvider>
       </body>
