@@ -5,6 +5,10 @@ export type ProviderId = "anthropic" | "kimi";
 export type SearchBackend = "native" | "exa";
 export type ModelTier = "default" | "reasoning";
 
+// Stable namespace for prompt_cache_key values across the project. Keep ASCII
+// only and lower-case — Moonshot stores cache_key on a string-equality basis.
+export const CACHE_KEY_PREFIX = "founderscope" as const;
+
 // Per-section EXA budget. Hard cap regardless of provider — protects
 // monthly EXA quota and forces model to converge instead of search-forever.
 export const EXA_BUDGET: Record<ModelTier, number> = {
@@ -30,6 +34,11 @@ export interface RunArgs<T> {
   tier: ModelTier;
   prompt: string;
   schema: ZodType<T>;
+  /**
+   * Stable Moonshot prompt_cache_key. Anthropic adapter currently ignores this.
+   * Format: "founderscope:section:<sectionKey>" or "founderscope:disambiguate".
+   */
+  cacheKey?: string;
 }
 
 export interface RunResult<T> {
