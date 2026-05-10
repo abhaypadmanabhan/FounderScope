@@ -37,10 +37,15 @@ describe("parseFinalOpenAI", () => {
     expect(result.data).toEqual({ ok: true });
   });
 
-  it("throws schema_validation when content is empty", () => {
+  it("throws model_error when content is empty", () => {
     const resp = makeChatCompletion("");
-    expect(() => parseFinalOpenAI(resp, SimpleSchema, "kimi-k2.6", "kimi"))
-      .toThrow(ResearchError);
+    try {
+      parseFinalOpenAI(resp, SimpleSchema, "kimi-k2.6", "kimi");
+      throw new Error("expected throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(ResearchError);
+      expect((err as ResearchError).category).toBe("model_error");
+    }
   });
 
   it("throws schema_validation when JSON parses but Zod rejects", () => {
