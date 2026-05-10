@@ -66,6 +66,7 @@ Begin researching now using web_search. When done, output JSON only.`;
     tier: "default",
     prompt,
     schema: DisambiguationSchema,
+    cacheKey: "founderscope:disambiguate",
   });
   return result.data;
 }

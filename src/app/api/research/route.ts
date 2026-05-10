@@ -252,6 +252,7 @@ async function callAndValidate(args: CallAndValidateArgs) {
     tier: section.tier,
     prompt,
     schema: section.outputSchema,
+    cacheKey: section.cacheKey,
   });
 
   const rawCitations = extractCitations(result.data);
