@@ -10,7 +10,7 @@ import type { RunArgs, RunResult, ModelTier } from "../types";
 import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
 import { handleExaSearch, openaiExaToolDef } from "../tools/exa-search";
-import { mapOpenAIError, parseFinalOpenAI, withRetry } from "../shared";
+import { mapOpenAIError, parseFinalOpenAI, withRetry, type OpenAIChatCompletionLike } from "../shared";
 
 const TIMEOUT_MS = 120_000;
 const KIMI_BASE_URL = "https://api.moonshot.ai/v1";
@@ -89,23 +89,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
     { role: "user", content: prompt },
   ];
 
-  let response!: {
-    id?: string;
-    model?: string;
-    choices: Array<{
-      index?: number;
-      finish_reason?: string;
-      message: {
-        role?: string;
-        content?: string | null;
-        tool_calls?: Array<{
-          id: string;
-          type: "function";
-          function: { name: string; arguments: string };
-        }>;
-      };
-    }>;
-  };
+  let response!: OpenAIChatCompletionLike;
   let safety = 0;
   const exaBudget = { used: 0 };
 
@@ -129,9 +113,9 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
 
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        response = await client.chat.completions.create(params as any, {
+        response = (await client.chat.completions.create(params as any, {
           signal: controller.signal,
-        }) as unknown as typeof response;
+        })) as unknown as OpenAIChatCompletionLike;
       } catch (err) {
         throw mapOpenAIError(err, "Kimi", TIMEOUT_MS);
       }
@@ -140,7 +124,16 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       const finish = choice?.finish_reason;
       const message = choice?.message;
 
-      if (finish === "stop" || finish === "length") {
+      if (finish === "stop") {
+        break;
+      }
+      if (finish === "length") {
+        if (isDev) {
+          console.warn("[kimi] finish_reason=length — max_tokens reached, output likely truncated", {
+            model: cfg.model,
+            max_tokens: cfg.max_tokens,
+          });
+        }
         break;
       }
 

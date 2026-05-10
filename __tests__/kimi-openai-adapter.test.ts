@@ -330,6 +330,27 @@ describe("Kimi adapter — tool loop", () => {
       message: expect.stringMatching(/exceeded max tool turns/),
     });
   });
+
+  it("throws model_error when finish_reason=tool_calls but tool_calls is empty", async () => {
+    const { runKimi } = await import("@/lib/llm/adapters/kimi");
+    chatResponseSequence = [
+      {
+        id: "chatcmpl-empty-tools",
+        model: "kimi-k2-0905-preview",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "tool_calls",
+            message: { role: "assistant", content: null }, // no tool_calls field
+          },
+        ],
+      },
+    ];
+    await expect(runKimi(makeArgs("default"))).rejects.toMatchObject({
+      category: "model_error",
+      message: expect.stringMatching(/finish_reason=tool_calls with no tool_calls/),
+    });
+  });
 });
 
 describe("Kimi adapter — EXA budget enforcement", () => {
