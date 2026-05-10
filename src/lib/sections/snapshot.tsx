@@ -13,33 +13,42 @@ import { padOrder } from "@/lib/sections/format";
 const outputSchema = z.object({
   summary: z.string(),
   tagline: z.string(),
-  business_model: z.enum(["B2B", "B2C", "B2B2C", "B2G", "Marketplace", "Other"]),
+  // Models occasionally drift outside the enum (e.g. "50-200", "Late stage", a custom
+  // bucket). Don't fail the whole section over a tag. .catch maps any unrecognized value
+  // to a safe fallback the renderer already treats specially.
+  business_model: z
+    .enum(["B2B", "B2C", "B2B2C", "B2G", "Marketplace", "Other"])
+    .catch("Other"),
   industry: z.string(),
-  stage: z.enum([
-    "Seed",
-    "Series A",
-    "Series B",
-    "Series C",
-    "Series D+",
-    "Growth",
-    "Public",
-    "Acquired",
-    "Bootstrapped",
-    "Unknown",
-  ]),
+  stage: z
+    .enum([
+      "Seed",
+      "Series A",
+      "Series B",
+      "Series C",
+      "Series D+",
+      "Growth",
+      "Public",
+      "Acquired",
+      "Bootstrapped",
+      "Unknown",
+    ])
+    .catch("Unknown"),
   hq: z.string().nullable(),
   founded_year: z.number().int().nullable(),
-  employee_count_band: z.enum([
-    "1-10",
-    "11-50",
-    "51-200",
-    "201-500",
-    "501-1000",
-    "1001-5000",
-    "5001-10000",
-    "10000+",
-    "Unknown",
-  ]),
+  employee_count_band: z
+    .enum([
+      "1-10",
+      "11-50",
+      "51-200",
+      "201-500",
+      "501-1000",
+      "1001-5000",
+      "5001-10000",
+      "10000+",
+      "Unknown",
+    ])
+    .catch("Unknown"),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
