@@ -23,6 +23,7 @@ type ChatResponse = {
     message: {
       role: "assistant";
       content: string | null;
+      reasoning_content?: string;
       tool_calls?: Array<{
         id: string;
         type: "function";
@@ -164,6 +165,7 @@ function stopResponse(model: string, json = '{"ok":true}'): ChatResponse {
 function toolCallResponse(
   model: string,
   toolCalls: Array<{ id: string; name: string; args: object }>,
+  opts: { reasoningContent?: string } = {},
 ): ChatResponse {
   return {
     id: "chatcmpl-tools",
@@ -175,6 +177,9 @@ function toolCallResponse(
         message: {
           role: "assistant",
           content: null,
+          ...(opts.reasoningContent !== undefined
+            ? { reasoning_content: opts.reasoningContent }
+            : {}),
           tool_calls: toolCalls.map((c) => ({
             id: c.id,
             type: "function" as const,
@@ -351,6 +356,67 @@ describe("Kimi adapter — tool loop", () => {
       category: "model_error",
       message: expect.stringMatching(/finish_reason=tool_calls with no tool_calls/),
     });
+  });
+});
+
+describe("Kimi adapter — reasoning_content echo (K2.6 thinking mode)", () => {
+  it("preserves reasoning_content on the echoed assistant tool_calls message (reasoning tier)", async () => {
+    const { runKimi } = await import("@/lib/llm/adapters/kimi");
+    const REASONING = "step 1: search for moat info\nstep 2: synthesize";
+    chatResponseSequence = [
+      toolCallResponse(
+        "kimi-k2.6",
+        [{ id: "tc-1", name: "exa_search", args: { query: "stripe moat" } }],
+        { reasoningContent: REASONING },
+      ),
+      stopResponse("kimi-k2.6"),
+    ];
+    await runKimi(makeArgs("reasoning"));
+    expect(sdkCalls).toHaveLength(2);
+    const secondMessages = sdkCalls[1].params.messages as Array<{
+      role: string;
+      reasoning_content?: string;
+      tool_calls?: unknown;
+    }>;
+    const echoed = secondMessages[1];
+    expect(echoed.role).toBe("assistant");
+    expect(echoed.tool_calls).toBeDefined();
+    expect(echoed.reasoning_content).toBe(REASONING);
+  });
+
+  it("does NOT echo reasoning_content on default tier (thinking off)", async () => {
+    const { runKimi } = await import("@/lib/llm/adapters/kimi");
+    chatResponseSequence = [
+      toolCallResponse(
+        "kimi-k2.5",
+        [{ id: "tc-1", name: "exa_search", args: { query: "q" } }],
+        { reasoningContent: "should-not-be-echoed" },
+      ),
+      stopResponse("kimi-k2.5"),
+    ];
+    await runKimi(makeArgs("default"));
+    const secondMessages = sdkCalls[1].params.messages as Array<{
+      role: string;
+      reasoning_content?: string;
+    }>;
+    expect(secondMessages[1].role).toBe("assistant");
+    expect(secondMessages[1].reasoning_content).toBeUndefined();
+  });
+
+  it("omits reasoning_content key entirely when the model returns none (reasoning tier)", async () => {
+    const { runKimi } = await import("@/lib/llm/adapters/kimi");
+    chatResponseSequence = [
+      toolCallResponse("kimi-k2.6", [
+        { id: "tc-1", name: "exa_search", args: { query: "q" } },
+      ]),
+      stopResponse("kimi-k2.6"),
+    ];
+    await runKimi(makeArgs("reasoning"));
+    const secondMessages = sdkCalls[1].params.messages as Array<{
+      role: string;
+      reasoning_content?: string;
+    }>;
+    expect("reasoning_content" in secondMessages[1]).toBe(false);
   });
 });
 

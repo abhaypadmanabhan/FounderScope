@@ -169,11 +169,24 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
           );
         }
 
-        messages.push({
+        // Moonshot K2.6 with thinking enabled returns `reasoning_content` on the
+        // assistant message and rejects subsequent requests if it isn't echoed
+        // back on every tool_calls turn ("thinking is enabled but
+        // reasoning_content is missing in assistant tool call message"). The
+        // field is a Moonshot extension and not typed on OpenAI's SDK.
+        const echoed: Record<string, unknown> = {
           role: "assistant",
           content: message?.content ?? null,
           tool_calls: toolCalls,
-        });
+        };
+        if (cfg.thinking) {
+          const rc = (message as { reasoning_content?: unknown } | undefined)
+            ?.reasoning_content;
+          if (typeof rc === "string" && rc.length > 0) {
+            echoed.reasoning_content = rc;
+          }
+        }
+        messages.push(echoed);
 
         const budget = EXA_BUDGET[tier];
         const toolReplies = await Promise.all(
