@@ -17,6 +17,7 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar";
 import { Logomark } from "./logomark";
+import { UserBadge } from "./user-badge";
 import { useSearchPalette } from "./search-palette-provider";
 import { useRecents } from "@/hooks/use-recents";
 import { formatRelative } from "@/lib/format";
@@ -168,6 +169,7 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter>
+        <UserBadge />
         <SidebarMenu>
           <SidebarMenuItem>
             <Link href="/settings">
