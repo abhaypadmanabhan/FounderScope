@@ -23,6 +23,8 @@ import {
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
+import { cookies } from "next/headers";
+import { supabaseServer } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +56,19 @@ export async function POST(request: Request) {
       headers: { "content-type": "application/json" },
     });
   }
+
+  const supabaseUser = supabaseServer(
+    cookies() as unknown as Parameters<typeof supabaseServer>[0],
+  );
+  const { data: userData } = await supabaseUser.auth.getUser();
+  const userId = userData?.user?.id ?? null;
+  if (!userId && process.env.MOCK_RESEARCH !== "true") {
+    return new Response(JSON.stringify({ error: "unauthorized" }), {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    });
+  }
+
   if (process.env.MOCK_RESEARCH === "true") {
     const { createMockResearchStream } = await import("@/lib/mock-research");
     return new Response(createMockResearchStream(body.name), {
@@ -135,6 +150,27 @@ export async function POST(request: Request) {
           disambig.canonical_name,
           disambig.canonical_domain
         ).catch(() => undefined);
+
+        // Record the visit on the user's history. Idempotent via the
+        // (user_id, company_id) unique index. Best-effort: a failure here
+        // should not block the rest of the research stream.
+        if (userId) {
+          await supabaseUser
+            .from("search_history")
+            .upsert(
+              {
+                user_id: userId,
+                company_id: company.id,
+                searched_at: new Date().toISOString(),
+              },
+              { onConflict: "user_id,company_id" },
+            )
+            .then(({ error }) => {
+              if (error) {
+                console.error("[research] search_history upsert failed", error);
+              }
+            });
+        }
 
         const companyInput: CompanyInput = {
           name: disambig.canonical_name,

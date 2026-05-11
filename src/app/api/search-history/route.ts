@@ -1,8 +1,10 @@
-// GET — last 8 visited companies, most recent first.
-// POST — record a visit for a slug; deletes prior rows for the same company so the most recent visit wins (dedupe).
+// GET — last 8 companies this user visited, most recent first.
+// POST — record (or refresh) a visit. Upserts on (user_id, company_id) so a
+// repeat visit just bumps `searched_at`.
 import { NextResponse } from "next/server";
+import { cookies } from "next/headers";
 import { z } from "zod";
-import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
+import { supabaseServer } from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,9 +14,21 @@ type RecentRow = {
   companies: { slug: string; display_name: string } | null;
 };
 
+function client() {
+  return supabaseServer(
+    cookies() as unknown as Parameters<typeof supabaseServer>[0],
+  );
+}
+
 export async function GET() {
   if (process.env.MOCK_RESEARCH === "true") {
     return NextResponse.json({ entries: [] });
+  }
+
+  const supabase = client();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   const { data, error } = await supabase
@@ -35,7 +49,10 @@ export async function GET() {
       searched_at: r.searched_at,
     }));
 
-  return NextResponse.json({ entries }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(
+    { entries },
+    { headers: { "Cache-Control": "no-store" } },
+  );
 }
 
 const postSchema = z.object({ slug: z.string().min(1) });
@@ -43,6 +60,12 @@ const postSchema = z.object({ slug: z.string().min(1) });
 export async function POST(request: Request) {
   if (process.env.MOCK_RESEARCH === "true") {
     return NextResponse.json({ ok: true });
+  }
+
+  const supabase = client();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData?.user) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
   let body: z.infer<typeof postSchema>;
@@ -65,15 +88,19 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "company_not_found" }, { status: 404 });
   }
 
-  const companyId = (company as { id: string }).id;
-
-  await supabase.from("search_history").delete().eq("company_id", companyId);
-  const { error: insertErr } = await supabase
+  const { error: upsertErr } = await supabase
     .from("search_history")
-    .insert({ company_id: companyId });
+    .upsert(
+      {
+        user_id: userData.user.id,
+        company_id: (company as { id: string }).id,
+        searched_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,company_id" },
+    );
 
-  if (insertErr) {
-    return NextResponse.json({ error: insertErr.message }, { status: 500 });
+  if (upsertErr) {
+    return NextResponse.json({ error: upsertErr.message }, { status: 500 });
   }
 
   return NextResponse.json({ ok: true });

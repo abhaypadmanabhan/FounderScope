@@ -17,6 +17,19 @@ const sdkCalls: SdkCall[] = [];
 
 // ---- Mocks (declared before the route import) ----
 
+vi.mock("next/headers", () => ({
+  cookies: () => ({ get: () => undefined, set: () => undefined, getAll: () => [] }),
+}));
+
+vi.mock("@/lib/supabase/server", () => ({
+  supabaseServer: () => ({
+    auth: { getUser: async () => ({ data: { user: { id: "u1" } } }) },
+    from: () => ({
+      upsert: async () => ({ error: null }),
+    }),
+  }),
+}));
+
 vi.mock("@/lib/companies", () => ({
   findOrCreateCompany: vi.fn(async () => ({
     id: "co-1",
