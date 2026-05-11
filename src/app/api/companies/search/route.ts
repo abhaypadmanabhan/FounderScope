@@ -1,23 +1,15 @@
-// GET /api/companies/search — typeahead over this user's researched companies.
-// Joins search_history → companies so only entries in the user's history
-// surface. RLS auto-scopes the search_history rows; the join filters the
-// companies accordingly.
+// GET /api/companies/search — typeahead across all cached companies.
+// Auth-gated (401 if no session) but not scoped to the current user's
+// history — a cache hit by any user benefits everyone. Clicking a result
+// records a search_history visit via the /company/[slug] page, which is
+// what makes the company appear in the current user's sidebar.
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type Row = {
-  companies: {
-    slug: string;
-    display_name: string;
-    domain: string | null;
-    logo_url: string | null;
-    last_refreshed_at: string | null;
-  } | null;
-};
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -59,15 +51,11 @@ export async function GET(request: Request) {
   const escaped = q.replace(/[%_\\]/g, (m) => `\\${m}`);
   const pattern = `%${escaped}%`;
 
-  const { data, error } = await supabase
-    .from("search_history")
-    .select(
-      "companies!inner(slug, display_name, domain, logo_url, last_refreshed_at)",
-    )
-    .or(`display_name.ilike.${pattern},slug.ilike.${pattern}`, {
-      foreignTable: "companies",
-    })
-    .order("searched_at", { ascending: false })
+  const { data, error } = await supabaseAdmin
+    .from("companies")
+    .select("slug, display_name, domain, logo_url, last_refreshed_at")
+    .or(`display_name.ilike.${pattern},slug.ilike.${pattern}`)
+    .order("last_refreshed_at", { ascending: false, nullsFirst: false })
     .limit(5);
 
   if (error) {
@@ -77,9 +65,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const out = ((data ?? []) as unknown as Row[])
-    .map((r) => r.companies)
-    .filter((c): c is NonNullable<Row["companies"]> => c !== null);
-
-  return NextResponse.json(out, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(data ?? [], {
+    headers: { "Cache-Control": "no-store" },
+  });
 }

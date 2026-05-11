@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getUserMock = vi.fn();
-const fromMock = vi.fn();
+const adminFromMock = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: () => ({ get: () => undefined, set: vi.fn(), getAll: () => [] }),
@@ -10,15 +10,20 @@ vi.mock("next/headers", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   supabaseServer: () => ({
     auth: { getUser: getUserMock },
-    from: (...args: unknown[]) => fromMock(...args),
   }),
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  supabaseAdmin: {
+    from: (...args: unknown[]) => adminFromMock(...args),
+  },
 }));
 
 import { GET } from "@/app/api/companies/search/route";
 
 beforeEach(() => {
   getUserMock.mockReset();
-  fromMock.mockReset();
+  adminFromMock.mockReset();
 });
 
 describe("GET /api/companies/search", () => {
@@ -39,19 +44,17 @@ describe("GET /api/companies/search", () => {
     expect(await res.json()).toEqual([]);
   });
 
-  it("queries through search_history scoped to the authenticated user", async () => {
+  it("queries the companies table directly (not joined through search_history)", async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: "u1" } } });
 
     const limit = vi.fn().mockResolvedValue({
       data: [
         {
-          companies: {
-            slug: "stripe",
-            display_name: "Stripe",
-            domain: "stripe.com",
-            logo_url: null,
-            last_refreshed_at: null,
-          },
+          slug: "stripe",
+          display_name: "Stripe",
+          domain: "stripe.com",
+          logo_url: null,
+          last_refreshed_at: null,
         },
       ],
       error: null,
@@ -59,7 +62,7 @@ describe("GET /api/companies/search", () => {
     const order = vi.fn().mockReturnValue({ limit });
     const or = vi.fn().mockReturnValue({ order });
     const select = vi.fn().mockReturnValue({ or });
-    fromMock.mockReturnValue({ select });
+    adminFromMock.mockReturnValue({ select });
 
     const res = await GET(
       new Request("https://app.test/api/companies/search?q=stri"),
@@ -75,6 +78,6 @@ describe("GET /api/companies/search", () => {
         last_refreshed_at: null,
       },
     ]);
-    expect(fromMock).toHaveBeenCalledWith("search_history");
+    expect(adminFromMock).toHaveBeenCalledWith("companies");
   });
 });
