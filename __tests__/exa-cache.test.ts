@@ -24,7 +24,8 @@ describe("cacheKeyFor", () => {
     const a = cacheKeyFor({ query: "stripe", numResults: 5 });
     const b = cacheKeyFor({ query: "stripe", numResults: 5 });
     expect(a).toBe(b);
-    expect(a).toMatch(/^[0-9a-f]{64}$/);
+    // FNV-1a 64-bit hex (16 chars), 0-padded.
+    expect(a).toMatch(/^[0-9a-f]{16}$/);
   });
 
   it("normalizes case + whitespace in the query", () => {
