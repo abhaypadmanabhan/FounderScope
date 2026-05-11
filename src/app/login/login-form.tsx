@@ -61,14 +61,26 @@ export function LoginForm({ next, initialError }: Props) {
   const [pendingGoogle, startGoogle] = useTransition();
   const [pendingMagic, startMagic] = useTransition();
 
-  const callback = (path: string) =>
-    `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback?next=${encodeURIComponent(path)}`;
+  // Bare callback URL — Supabase's redirect_to allowlist matches the full
+  // URL including query, so adding `?next=...` here forces every user to
+  // configure glob patterns. Instead we stash `next` in a short-lived
+  // cookie and the callback route reads it back.
+  const callback = () =>
+    `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback`;
+
+  const stashNext = () => {
+    if (typeof document === "undefined") return;
+    if (!next || next === "/") return;
+    // 10-minute, Lax, path-scoped cookie. Cleared by the callback route.
+    document.cookie = `fs_next=${encodeURIComponent(next)}; Max-Age=600; Path=/; SameSite=Lax`;
+  };
 
   const handleGoogle = () => {
+    stashNext();
     startGoogle(async () => {
       const { error } = await supabaseBrowser().auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: callback(next) },
+        options: { redirectTo: callback() },
       });
       if (error) {
         setState({ stage: "form", error: error.message });
@@ -80,10 +92,11 @@ export function LoginForm({ next, initialError }: Props) {
     e.preventDefault();
     const value = email.trim();
     if (!value) return;
+    stashNext();
     startMagic(async () => {
       const { error } = await supabaseBrowser().auth.signInWithOtp({
         email: value,
-        options: { emailRedirectTo: callback(next) },
+        options: { emailRedirectTo: callback() },
       });
       if (error) {
         setState({ stage: "form", error: error.message });

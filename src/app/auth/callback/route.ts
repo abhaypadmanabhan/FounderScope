@@ -11,15 +11,31 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const next = url.searchParams.get("next") ?? "/";
+  const cookieStore = cookies() as unknown as Parameters<
+    typeof supabaseServer
+  >[0] & {
+    get(name: string): { value: string } | undefined;
+    set?(
+      name: string,
+      value: string,
+      options?: Record<string, unknown>,
+    ): void;
+  };
+
+  // Prefer ?next= query param (legacy), fall back to fs_next cookie
+  // stashed by the login form before the OAuth round-trip.
+  const queryNext = url.searchParams.get("next");
+  const cookieNext = cookieStore.get?.("fs_next")?.value;
+  const next = queryNext ?? (cookieNext ? decodeURIComponent(cookieNext) : "/");
+
+  // Best-effort: clear the stash cookie so it doesn't leak into a later session.
+  cookieStore.set?.("fs_next", "", { maxAge: 0, path: "/" });
 
   if (!code) {
     return NextResponse.redirect(new URL("/login?error=auth_error", url.origin));
   }
 
-  const supabase = supabaseServer(
-    cookies() as unknown as Parameters<typeof supabaseServer>[0],
-  );
+  const supabase = supabaseServer(cookieStore);
   const { error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
