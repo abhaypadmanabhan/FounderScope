@@ -13,7 +13,7 @@
 // All Supabase ops are best-effort: a cache miss is the safe default, so any
 // transport / schema / RLS failure returns null (read) or silently drops
 // (write). The hot path must never fail because the cache is unavailable.
-import { supabase } from "../../supabase";
+import { supabaseAdmin as supabase } from "../../supabase/admin";
 import type { ExaSearchInput, ExaSearchOutput } from "./exa-client";
 
 const DEFAULT_TTL_DAYS = 7;

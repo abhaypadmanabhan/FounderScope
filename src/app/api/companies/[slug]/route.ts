@@ -1,6 +1,6 @@
 // GET /api/companies/[slug] — cached report: company + all section rows with derived status.
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
 import { countCitationStatuses } from "@/lib/citations";
 import type { Citation } from "@/lib/sections/types";
 

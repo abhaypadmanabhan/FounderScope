@@ -1,5 +1,5 @@
 // Company row resolution: find existing by slug, otherwise insert with collision handling.
-import { supabase } from "./supabase";
+import { supabaseAdmin as supabase } from "./supabase/admin";
 import { resolveCollisionSlug, slugify } from "./slug";
 import { exaCompanyLogo } from "./llm/tools/exa-client";
 

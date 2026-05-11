@@ -2,7 +2,7 @@
 // POST — record a visit for a slug; deletes prior rows for the same company so the most recent visit wins (dedupe).
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

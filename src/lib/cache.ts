@@ -1,5 +1,5 @@
 // TTL + schema-version cache logic for section reports stored in Supabase.
-import { supabase } from "./supabase";
+import { supabaseAdmin as supabase } from "./supabase/admin";
 import type { SectionDefinition, Citation } from "./sections/types";
 import { differenceInDays } from "date-fns";
 

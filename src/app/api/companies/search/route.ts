@@ -1,6 +1,6 @@
 // GET /api/companies/search — typeahead by display_name (and slug fallback). Returns up to 5.
 import { NextResponse } from "next/server";
-import { supabase } from "@/lib/supabase";
+import { supabaseAdmin as supabase } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
