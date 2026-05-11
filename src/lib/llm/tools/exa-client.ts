@@ -54,3 +54,51 @@ export async function exaSearch(
     })),
   };
 }
+
+// Logo lookup. Best-effort: returns null on any failure so callers (e.g.
+// findOrCreateCompany) can proceed without a logo. Prefers extras.imageLinks
+// (usually og:image — a clean wordmark on company sites), then favicon.
+const LOGO_TIMEOUT_MS = 5_000;
+
+export async function exaCompanyLogo(
+  input: { name: string; domain: string | null },
+  apiKey: string,
+): Promise<string | null> {
+  if (!apiKey) return null;
+
+  const body: Record<string, unknown> = {
+    query: `${input.name} official site`,
+    type: "auto",
+    numResults: 1,
+    contents: { extras: { imageLinks: 1 } },
+  };
+  if (input.domain) body.includeDomains = [input.domain];
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), LOGO_TIMEOUT_MS);
+  try {
+    const res = await fetch(EXA_ENDPOINT, {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      results?: Array<{
+        favicon?: string;
+        extras?: { imageLinks?: string[] };
+      }>;
+    };
+    const top = json.results?.[0];
+    if (!top) return null;
+    const image = top.extras?.imageLinks?.[0];
+    if (image) return image;
+    if (top.favicon) return top.favicon;
+    return null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}

@@ -1,6 +1,7 @@
 // Company row resolution: find existing by slug, otherwise insert with collision handling.
 import { supabase } from "./supabase";
 import { resolveCollisionSlug, slugify } from "./slug";
+import { exaCompanyLogo } from "./llm/tools/exa-client";
 
 export type CompanyRow = {
   id: string;
@@ -52,12 +53,15 @@ async function insertCompany(
   const tokens = [slug, displayName.toLowerCase()];
   if (domain) tokens.push(domain.toLowerCase());
 
+  const logoUrl = await fetchLogoSilently(displayName, domain);
+
   const { data, error } = await supabase
     .from("companies")
     .insert({
       slug,
       display_name: displayName,
       domain,
+      logo_url: logoUrl,
       search_tokens: tokens,
       last_refreshed_at: new Date().toISOString(),
     })
@@ -66,6 +70,21 @@ async function insertCompany(
 
   if (error) throw new Error(`insertCompany: ${error.message}`);
   return data as CompanyRow;
+}
+
+// Best-effort logo lookup. Never throws — a missing logo is fine, the UI
+// falls back to Clearbit then to a serif initial.
+async function fetchLogoSilently(
+  name: string,
+  domain: string | null,
+): Promise<string | null> {
+  const key = process.env.EXA_API_KEY;
+  if (!key) return null;
+  try {
+    return await exaCompanyLogo({ name, domain }, key);
+  } catch {
+    return null;
+  }
 }
 
 export async function touchLastRefreshed(companyId: string): Promise<void> {

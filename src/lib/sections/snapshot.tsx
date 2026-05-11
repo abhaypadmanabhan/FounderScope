@@ -60,7 +60,12 @@ const Renderer: React.FC<RendererProps<Output>> = ({ data, citations, company, s
         className="grid items-start gap-x-12 gap-y-8 mb-10 grid-cols-1 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]"
       >
         <div className="flex items-start gap-6">
-          <CompanyLogo name={company.display_name} domain={company.domain} size={96} />
+          <CompanyLogo
+            name={company.display_name}
+            domain={company.domain}
+            logoUrl={company.logo_url}
+            size={96}
+          />
           <div className="flex-1 min-w-0 pt-1">
             <h1
               className="h-display m-0"

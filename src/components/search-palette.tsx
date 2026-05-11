@@ -136,7 +136,12 @@ export function SearchPalette({ open, initialQuery = "", onOpenChange }: Props) 
                   onSelect={() => navigate(c.slug)}
                   className="flex items-center gap-3 px-2.5 py-2 rounded-md cursor-pointer data-[selected=true]:bg-[var(--bg-active)] t-200"
                 >
-                  <CompanyLogo name={c.display_name} domain={c.domain} size={28} />
+                  <CompanyLogo
+                    name={c.display_name}
+                    domain={c.domain}
+                    logoUrl={c.logo_url}
+                    size={28}
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-sm" style={{ color: "var(--text)" }}>
                       {c.display_name}

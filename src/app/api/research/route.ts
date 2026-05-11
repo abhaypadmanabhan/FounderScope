@@ -102,6 +102,7 @@ export async function POST(request: Request) {
         slug: company.slug,
         name: company.display_name,
         domain: company.domain,
+        logo_url: company.logo_url,
       });
 
       (async () => {

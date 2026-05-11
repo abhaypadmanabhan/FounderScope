@@ -32,6 +32,7 @@ export type RendererCompany = {
   slug: string;
   display_name: string;
   domain: string | null;
+  logo_url: string | null;
 };
 
 // Section identity passed into every Renderer. Lets renderers stop hardcoding

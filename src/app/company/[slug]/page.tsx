@@ -158,6 +158,7 @@ export default function CompanyPage({ params }: PageProps) {
     slug,
     display_name: company?.display_name?.trim() || humanizeSlug(slug),
     domain: company?.domain ?? null,
+    logo_url: company?.logo_url ?? null,
   };
 
   const handleRefresh = () => {
@@ -397,7 +398,8 @@ function handleEvent(
         slug: "",
         display_name: d.canonical_name,
         domain: d.canonical_domain ?? null,
-      } as Company);
+        logo_url: null,
+      });
     }
   } else if (event === "section_started") {
     const d = data as { section_key: string };

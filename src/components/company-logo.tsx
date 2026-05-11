@@ -1,18 +1,42 @@
-// Company logo — Clearbit fetch with serif initial fallback.
+// Company logo — prefer stored EXA URL, fall back to Clearbit, then serif initial.
 "use client";
 import { useState } from "react";
 
 interface Props {
   name: string;
   domain?: string | null;
+  logoUrl?: string | null;
   size?: number;
 }
 
-export function CompanyLogo({ name, domain, size = 64 }: Props) {
+type Step = "primary" | "clearbit" | "initial";
+
+function initialStep(logoUrl: string | null | undefined, domain: string | null | undefined): Step {
+  if (logoUrl) return "primary";
+  if (domain) return "clearbit";
+  return "initial";
+}
+
+export function CompanyLogo({ name, domain, logoUrl, size = 64 }: Props) {
   const [loaded, setLoaded] = useState(false);
-  const [errored, setErrored] = useState(false);
+  const [step, setStep] = useState<Step>(() => initialStep(logoUrl, domain));
   const initial = name?.[0]?.toUpperCase() ?? "·";
-  const showImage = !!domain && !errored;
+
+  const src =
+    step === "primary"
+      ? (logoUrl as string)
+      : step === "clearbit"
+        ? `https://logo.clearbit.com/${domain}`
+        : null;
+
+  const onError = () => {
+    setLoaded(false);
+    if (step === "primary") {
+      setStep(domain ? "clearbit" : "initial");
+    } else if (step === "clearbit") {
+      setStep("initial");
+    }
+  };
 
   return (
     <div
@@ -21,22 +45,22 @@ export function CompanyLogo({ name, domain, size = 64 }: Props) {
         width: size,
         height: size,
         borderRadius: 8,
-        background: showImage && loaded
+        background: src && loaded
           ? "var(--bg-elevated)"
           : "linear-gradient(155deg, oklch(0.32 0.07 18) 0%, oklch(0.22 0.05 18) 100%)",
         border: "1px solid var(--border-color)",
         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.04)",
       }}
     >
-      {showImage ? (
+      {src ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={`https://logo.clearbit.com/${domain}`}
+          src={src}
           alt={`${name} logo`}
           width={size}
           height={size}
           onLoad={() => setLoaded(true)}
-          onError={() => setErrored(true)}
+          onError={onError}
           style={{
             width: size,
             height: size,
