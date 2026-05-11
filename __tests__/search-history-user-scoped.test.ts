@@ -85,14 +85,14 @@ describe("POST /api/search-history", () => {
     const eq = vi.fn().mockReturnValue({ maybeSingle });
     const select = vi.fn().mockReturnValue({ eq });
 
-    // companies lookup goes through the admin client now.
+    // Both companies lookup and search_history upsert go through admin.
     adminFromMock.mockImplementation((table: string) => {
       if (table === "companies") return { select };
+      if (table === "search_history") return { upsert };
       throw new Error(`unexpected admin table ${table}`);
     });
-    fromMock.mockImplementation((table: string) => {
-      if (table === "search_history") return { upsert };
-      throw new Error(`unexpected table ${table}`);
+    fromMock.mockImplementation(() => {
+      throw new Error("user-scoped client should not be used for writes");
     });
 
     const req = new Request("https://app.test/api/search-history", {

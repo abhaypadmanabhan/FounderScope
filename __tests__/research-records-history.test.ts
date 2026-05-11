@@ -10,11 +10,16 @@ vi.mock("next/headers", () => ({
 vi.mock("@/lib/supabase/server", () => ({
   supabaseServer: () => ({
     auth: { getUser: getUserMock },
+  }),
+}));
+
+vi.mock("@/lib/supabase/admin", () => ({
+  supabaseAdmin: {
     from: (table: string) => {
       if (table === "search_history") return { upsert: upsertMock };
-      throw new Error(`unexpected table ${table}`);
+      throw new Error(`unexpected admin table ${table}`);
     },
-  }),
+  },
 }));
 
 // Mock heavy deps so the route POST doesn't actually run sections.

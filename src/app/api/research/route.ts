@@ -25,6 +25,7 @@ import { validateCitations, summarizeCitationStatuses, countCitationStatuses } f
 import { disambiguateCompany } from "@/lib/disambiguate";
 import { cookies } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -152,10 +153,12 @@ export async function POST(request: Request) {
         ).catch(() => undefined);
 
         // Record the visit on the user's history. Idempotent via the
-        // (user_id, company_id) unique index. Best-effort: a failure here
-        // should not block the rest of the research stream.
+        // (user_id, company_id) unique index. user_id is set explicitly
+        // from the authenticated session — admin client write bypasses
+        // RLS (we don't have an UPDATE policy on search_history, so the
+        // upsert's conflict path would otherwise fail).
         if (userId) {
-          await supabaseUser
+          await supabaseAdmin
             .from("search_history")
             .upsert(
               {

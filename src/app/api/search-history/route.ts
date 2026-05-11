@@ -93,7 +93,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "company_not_found" }, { status: 404 });
   }
 
-  const { error: upsertErr } = await supabase
+  // Use the admin client for the upsert. The user_id is set explicitly
+  // from the authenticated session (above), so write authorization is
+  // enforced at the application layer. RLS still scopes READS to the
+  // owner via the user-scoped client.
+  const { error: upsertErr } = await supabaseAdmin
     .from("search_history")
     .upsert(
       {
