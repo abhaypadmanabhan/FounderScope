@@ -1,5 +1,8 @@
 // Provider abstraction types — section authors and route.ts depend on this surface.
 import type { ZodType } from "zod";
+import type { ExaUsage } from "./tools/exa-search";
+
+export type { ExaUsage } from "./tools/exa-search";
 
 export type ProviderId = "anthropic" | "kimi";
 export type SearchBackend = "native" | "exa";
@@ -45,4 +48,10 @@ export interface RunResult<T> {
   data: T;
   raw: string;
   modelVersion: string;
+  /**
+   * Per-call Exa usage counters. Omitted when the adapter never invoked Exa
+   * (e.g. Anthropic with native web_search). route.ts aggregates these into
+   * a request-level total for the final `exa_usage` SSE event.
+   */
+  usage?: ExaUsage;
 }

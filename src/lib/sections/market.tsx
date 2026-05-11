@@ -35,6 +35,9 @@ const outputSchema = z.object({
     .min(0)
     .max(6),
   category_growth_rate: z.string(),
+  // Top-level section confidence — distinct from market_size_confidence above.
+  // Optional so legacy fixtures still validate.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
@@ -437,6 +440,7 @@ Cite every market size figure and competitor claim with a real URL in claims.`,
           },
         ],
         category_growth_rate: "~15% CAGR",
+        confidence: "high",
         claims: [
           {
             id: 1,

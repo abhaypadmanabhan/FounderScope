@@ -30,6 +30,9 @@ const outputSchema = z.object({
   web_traffic_trend: z.enum(["up", "flat", "down", "unknown"]),
   web_traffic_note: z.string(),
   other_signals: z.array(z.string()),
+  // Top-level section confidence — distinct from per-metric arr_estimate.confidence
+  // and headcount_history[].confidence above. Optional so legacy fixtures still validate.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
@@ -384,6 +387,7 @@ If a metric has no reliable source, mark confidence 'unknown' and explain in sou
           "Reported 40k+ paying users by mid-2024",
           "Mentioned by name in OpenAI/Anthropic launch demos",
         ],
+        confidence: "medium",
         claims: [
           {
             id: 1,

@@ -1,9 +1,17 @@
 // Thin wrapper over POST https://api.exa.ai/search.
 // We always use type=auto + contents.highlights=true; verbose text is too token-heavy
 // for a tool-use loop and highlights give the model what it needs to summarize.
+//
+// Optional filter params (includeDomains/excludeDomains/startPublishedDate/livecrawl)
+// are only sent when defined, so `exaSearch({query})` produces the same request
+// shape as before — backward compat for the existing exa-client tests.
 export interface ExaSearchInput {
   query: string;
   numResults?: number;
+  includeDomains?: string[];
+  excludeDomains?: string[];
+  startPublishedDate?: string; // ISO date, e.g. "2024-01-01"
+  livecrawl?: "always" | "fallback" | "never";
 }
 
 export interface ExaResult {
@@ -23,18 +31,27 @@ export async function exaSearch(
   apiKey: string,
 ): Promise<ExaSearchOutput> {
   const numResults = input.numResults ?? 5;
+  const body: Record<string, unknown> = {
+    query: input.query,
+    type: "auto",
+    numResults,
+    contents: { highlights: true },
+  };
+  if (input.includeDomains && input.includeDomains.length > 0) {
+    body.includeDomains = input.includeDomains;
+  }
+  if (input.excludeDomains && input.excludeDomains.length > 0) {
+    body.excludeDomains = input.excludeDomains;
+  }
+  if (input.startPublishedDate) body.startPublishedDate = input.startPublishedDate;
+  if (input.livecrawl) body.livecrawl = input.livecrawl;
   const res = await fetch(EXA_ENDPOINT, {
     method: "POST",
     headers: {
       "x-api-key": apiKey,
       "content-type": "application/json",
     },
-    body: JSON.stringify({
-      query: input.query,
-      type: "auto",
-      numResults,
-      contents: { highlights: true },
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

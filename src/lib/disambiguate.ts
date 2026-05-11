@@ -27,6 +27,12 @@ If multiple companies share this name, pick the one that:
   1. Matches the suggested domain if provided.
   2. Otherwise the most prominent for a technical-founder audience (likely a tech startup, not a hardware brand or unrelated consumer product).
 
+PREFERRED CANONICAL SOURCES:
+  - YC Directory (ycombinator.com/companies) — gives canonical name + domain for YC cos.
+  - Wellfound (wellfound.com) — startup profiles with verified domains.
+  - Crunchbase public pages — fallback for non-YC startups.
+For ambiguous names, run one \`site:\` search against the suggested domain before deciding.
+
 STRICT OUTPUT RULES:
 - Output ONE JSON object. No prose. No markdown. No code fences.
 - Response MUST start with { and end with }.

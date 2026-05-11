@@ -35,6 +35,9 @@ const outputSchema = z.object({
     )
     .min(1)
     .max(6),
+  // Section-level confidence. Optional — fixtures predating this field
+  // continue to validate.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 export type FoundersOutput = z.infer<typeof outputSchema>;
@@ -143,6 +146,7 @@ COST NOTE: 1–2 extra web_search calls per founder for these directed lookups i
               "Daniela Amodei was VP of Operations at OpenAI before co-founding Anthropic. Before OpenAI she spent five years at Stripe across Risk and Atlas. Her background is in international development and policy.",
           },
         ],
+        confidence: "high",
         claims: [
           {
             id: 1,

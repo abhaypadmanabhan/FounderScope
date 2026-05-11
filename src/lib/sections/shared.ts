@@ -96,6 +96,19 @@ SECTION: ${sectionTitle}
 
 ${sectionInstructions}
 
+EARLY-STAGE SOURCE PRIORITY:
+For founder-intel research, prioritize these sources in this order:
+  1. YC Directory  (ycombinator.com/companies)  — canonical for YC cohorts.
+  2. Wellfound     (wellfound.com)               — early-stage profiles, jobs, team size.
+  3. LinkedIn                                     — founder bios, headcount, hiring signal.
+  4. GitHub                                       — org activity, contributors, stack signals.
+  5. SEC EDGAR     (Form D filings)               — angel/seed funding for US entities.
+Cross-verification rule: if a concrete claim has fewer than 2 independent sources, mark
+inferred=true on that claim or label the surrounding section confidence as "low". For
+companies with fewer than 2 sources total, output "insufficient public data (est.)" in
+the relevant string fields and set top-level confidence: "low" if the schema includes it.
+Honesty beats false precision — early-stage gaps are signal, not failure.
+
 STRICT OUTPUT RULES:
 - Output ONE valid JSON object matching the schema below. No prose. No markdown. No code fences.
 - Response MUST start with { and end with }.

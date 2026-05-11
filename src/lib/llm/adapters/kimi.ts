@@ -9,7 +9,12 @@ import { z } from "zod";
 import type { RunArgs, RunResult, ModelTier } from "../types";
 import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
-import { handleExaSearch, openaiExaToolDef } from "../tools/exa-search";
+import {
+  handleExaSearch,
+  openaiExaToolDef,
+  createExaUsage,
+  type ExaUsage,
+} from "../tools/exa-search";
 import { mapOpenAIError, parseFinalOpenAI, withRetry, type OpenAIChatCompletionLike } from "../shared";
 
 const TIMEOUT_MS = 120_000;
@@ -99,6 +104,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   let response!: OpenAIChatCompletionLike;
   let safety = 0;
   const exaBudget = { used: 0 };
+  const usage: ExaUsage = createExaUsage();
 
   try {
     while (true) {
@@ -205,7 +211,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
             } catch {
               parsedArgs = { query: "" };
             }
-            const content = await handleExaSearch(parsedArgs, config.exaKey!);
+            const content = await handleExaSearch(parsedArgs, config.exaKey!, usage);
             return {
               role: "tool" as const,
               tool_call_id: call.id,
@@ -231,5 +237,6 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
     clearTimeout(timer);
   }
 
-  return parseFinalOpenAI(response, schema, cfg.model, "kimi");
+  const result = parseFinalOpenAI(response, schema, cfg.model, "kimi");
+  return { ...result, usage };
 }

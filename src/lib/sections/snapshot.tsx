@@ -48,6 +48,10 @@ const outputSchema = z.object({
       "Unknown",
     ])
     .catch("Unknown"),
+  // Section-level signal-quality tier. Optional so legacy cached content
+  // and fixtures continue to validate. Models set this when guided by the
+  // EARLY-STAGE SOURCE PRIORITY rule in buildSectionPrompt.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
@@ -209,6 +213,7 @@ export const snapshot: SectionDefinition<Output> = {
         hq: "San Francisco, CA",
         founded_year: 2010,
         employee_count_band: "5001-10000",
+        confidence: "high",
         claims: [
           {
             id: 1,

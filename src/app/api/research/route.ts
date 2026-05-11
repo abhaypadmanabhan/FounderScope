@@ -10,7 +10,16 @@ import {
   updateCompanyCanonical,
 } from "@/lib/companies";
 import { getCachedSection, upsertCachedSection } from "@/lib/cache";
-import { runResearchCall, ResearchError, selectProvider, type ProviderConfig, type Keys } from "@/lib/llm";
+import {
+  runResearchCall,
+  ResearchError,
+  selectProvider,
+  createExaUsage,
+  mergeExaUsage,
+  type ProviderConfig,
+  type Keys,
+  type ExaUsage,
+} from "@/lib/llm";
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
@@ -134,11 +143,27 @@ export async function POST(request: Request) {
           one_line_description: disambig.one_line_description,
         };
 
+        const totals: RequestTotals = {
+          usage: createExaUsage(),
+          totalClaims: 0,
+          citedClaims: 0,
+        };
+
         const tasks = SECTIONS.map((section) =>
-          runOneSection({ config, section, companyInput, companyId: company.id, send, abort, force: body.force })
+          runOneSection({ config, section, companyInput, companyId: company.id, send, abort, force: body.force, totals })
         );
         await Promise.allSettled(tasks);
         await touchLastRefreshed(company.id).catch(() => undefined);
+        send("exa_usage", {
+          calls: totals.usage.calls,
+          cache_hits: totals.usage.cacheHits,
+          rate_limit_429s: totals.usage.rateLimit429s,
+          fallback_hits: totals.usage.fallbackHits,
+          citation_fill_rate:
+            totals.totalClaims > 0 ? totals.citedClaims / totals.totalClaims : null,
+          total_claims: totals.totalClaims,
+          cited_claims: totals.citedClaims,
+        });
         send("done", { slug: company.slug });
       })()
         .catch((err) => {
@@ -162,6 +187,12 @@ export async function POST(request: Request) {
   });
 }
 
+type RequestTotals = {
+  usage: ExaUsage;
+  totalClaims: number;
+  citedClaims: number;
+};
+
 type RunSectionArgs = {
   config: ProviderConfig;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -171,10 +202,11 @@ type RunSectionArgs = {
   send: (event: string, payload: unknown) => void;
   abort: AbortController;
   force: boolean;
+  totals: RequestTotals;
 };
 
 async function runOneSection(args: RunSectionArgs) {
-  const { config, section, companyInput, companyId, send, abort, force } = args;
+  const { config, section, companyInput, companyId, send, abort, force, totals } = args;
   const sectionKey = section.key;
   send("section_started", { section_key: sectionKey });
 
@@ -203,6 +235,10 @@ async function runOneSection(args: RunSectionArgs) {
       section,
       prompt: basePrompt,
     });
+
+    if (result.usage) mergeExaUsage(totals.usage, result.usage);
+    totals.totalClaims += result.totalClaims;
+    totals.citedClaims += result.citedClaims;
 
     await upsertCachedSection(
       companyId,
@@ -261,11 +297,20 @@ async function callAndValidate(args: CallAndValidateArgs) {
   const citations: Citation[] = rawCitations.map((c, i) => ({ ...c, status: statuses[i] }));
   const summary = summarizeCitationStatuses(rawCitations, statuses);
 
+  // Pre-validation counts for fill-rate. totalClaims = claim entries the
+  // model emitted; citedClaims = entries with a non-null citation_url.
+  const dataClaims = (result.data as { claims?: unknown[] })?.claims;
+  const totalClaims = Array.isArray(dataClaims) ? dataClaims.length : 0;
+  const citedClaims = rawCitations.length;
+
   return {
     content: result.data,
     citations,
     modelVersion: result.modelVersion,
     summary,
+    usage: result.usage,
+    totalClaims,
+    citedClaims,
   };
 }
 

@@ -15,7 +15,9 @@ export type {
   ProviderConfig,
   RunArgs,
   RunResult,
+  ExaUsage,
 } from "./types";
+export { createExaUsage, mergeExaUsage } from "./tools/exa-search";
 
 export async function runResearchCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   switch (args.config.provider) {

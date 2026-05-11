@@ -9,7 +9,12 @@ import type {
 import type { RunArgs, RunResult, ModelTier } from "../types";
 import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
-import { EXA_SEARCH_TOOL, handleExaSearch } from "../tools/exa-search";
+import {
+  EXA_SEARCH_TOOL,
+  handleExaSearch,
+  createExaUsage,
+  type ExaUsage,
+} from "../tools/exa-search";
 import { parseFinal, mapSdkError, withRetry } from "../shared";
 
 const TIMEOUT_MS = 60_000;
@@ -57,6 +62,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   let safety = 0;
   const MAX_TURNS = 12;
   const exaBudget = { used: 0 };
+  const usage: ExaUsage = createExaUsage();
 
   try {
     while (true) {
@@ -83,7 +89,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       }
 
       if (response.stop_reason === "tool_use") {
-        const handled = await handleToolUse(response, config.exaKey, messages, tier, exaBudget);
+        const handled = await handleToolUse(response, config.exaKey, messages, tier, exaBudget, usage);
         if (handled === "unknown_tool") {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const unknown = response.content?.find((b: any) => b.type === "tool_use" && b.name !== "web_search" && b.name !== "code_execution");
@@ -119,7 +125,8 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
     clearTimeout(timer);
   }
 
-  return parseFinal(response, schema, model, "anthropic");
+  const result = parseFinal(response, schema, model, "anthropic");
+  return { ...result, usage };
 }
 
 function buildTools(args: RunArgs<unknown>, useReasoning: boolean) {
@@ -168,6 +175,7 @@ async function handleToolUse(
   messages: Array<{ role: string; content: unknown }>,
   tier: ModelTier,
   exaBudget: { used: number },
+  usage: ExaUsage,
 ): Promise<"server_handled" | "exa_handled" | "unknown_tool"> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const blocks = (response.content ?? []) as any[];
@@ -206,7 +214,7 @@ async function handleToolUse(
         return {
           type: "tool_result",
           tool_use_id: call.id,
-          content: await handleExaSearch(call.input, exaKey),
+          content: await handleExaSearch(call.input, exaKey, usage),
         };
       }),
     );

@@ -31,6 +31,8 @@ const outputSchema = z.object({
     methodology: z.string(),
   }),
   stack_evolution: z.string(),
+  // Section-level confidence. Optional so legacy fixtures still validate.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
@@ -373,6 +375,7 @@ Cite every concrete fact (specific tool name attribution, salary band source, et
         },
         stack_evolution:
           "Vercel started on Now.sh (their own product) with a Node monolith, then split deployment infra into the edge platform and added Go and Rust for performance-critical paths as the build pipeline scaled. The customer-facing product stayed Next.js — they ship their own framework.",
+        confidence: "medium",
         claims: [
           {
             id: 1,

@@ -131,6 +131,21 @@ describe("/api/research orchestrator", () => {
     expect(types[0]).toBe("company");
     expect(types).toContain("done");
 
+    // exa_usage event emitted right before done, carries the aggregated counter
+    // shape even when no Exa calls happened (Anthropic native search path).
+    const exaUsageEvent = events.find((e) => e.event === "exa_usage");
+    expect(exaUsageEvent).toBeDefined();
+    const usagePayload = exaUsageEvent!.data as Record<string, unknown>;
+    expect(usagePayload).toMatchObject({
+      calls: expect.any(Number),
+      cache_hits: expect.any(Number),
+      rate_limit_429s: expect.any(Number),
+      fallback_hits: expect.any(Number),
+      total_claims: expect.any(Number),
+      cited_claims: expect.any(Number),
+    });
+    expect(types.indexOf("exa_usage")).toBeLessThan(types.indexOf("done"));
+
     const startedKeys = events
       .filter((e) => e.event === "section_started")
       .map((e) => (e.data as { section_key: string }).section_key);

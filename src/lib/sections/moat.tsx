@@ -64,6 +64,9 @@ const outputSchema = z.object({
   defensible: z.string(),
   overrated: z.string(),
   attack_vector: z.string(),
+  // Top-level section confidence — distinct from the per-axis confidence on
+  // replicability above. Optional so legacy fixtures still validate.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
@@ -550,6 +553,7 @@ CLAIMS — every concrete fact (founding year, key customer, technical detail, m
           "The 'best docs in fintech' brand. Docs are a six-month project for a focused team. The reason nobody catches up is everyone re-builds the platform first instead of just shipping the docs.",
         attack_vector:
           "Stripe's API-first model means the merchant owns the checkout page — Stripe never sees the buyer. Attack by owning the buyer relationship end-to-end (like Shop Pay for Shopify). Build an embedded checkout that captures buyer identity and purchase history across merchants. Stripe can't follow because adding a buyer-facing product would alienate the developer audience that chose them specifically for staying invisible.",
+        confidence: "high",
         claims: [
           {
             id: 1,

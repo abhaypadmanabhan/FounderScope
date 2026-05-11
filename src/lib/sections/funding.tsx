@@ -36,6 +36,8 @@ const outputSchema = z.object({
       kind: milestoneKindEnum,
     })
   ),
+  // Section-level confidence. Optional so legacy fixtures still validate.
+  confidence: z.enum(["high", "medium", "low"]).optional(),
   claims: claimsSchema,
 });
 type Output = z.infer<typeof outputSchema>;
@@ -420,6 +422,7 @@ Cite every round amount and investor with a real URL in claims. Round info infer
           { date: "2018-03", label: "Notion 2.0 launch with database blocks", kind: "product" },
           { date: "2021-10", label: "Reaches $10B valuation", kind: "press" },
         ],
+        confidence: "high",
         claims: [
           {
             id: 1,
