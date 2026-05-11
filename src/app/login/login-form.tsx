@@ -10,11 +10,49 @@ type Props = {
   initialError?: string;
 };
 
+type Mode = "signin" | "signup";
+
 type State =
   | { stage: "form"; error: string | null }
-  | { stage: "sent"; email: string };
+  | { stage: "sent"; email: string; mode: Mode };
+
+const COPY: Record<Mode, {
+  cardTitle: string;
+  cardLead: string;
+  googleLabel: string;
+  emailLabel: string;
+  submitLabel: string;
+  switchPrompt: string;
+  switchCta: string;
+  sentTitle: string;
+  sentBody: (email: string) => string;
+}> = {
+  signin: {
+    cardTitle: "Welcome back",
+    cardLead: "Sign in to pick up where you left off.",
+    googleLabel: "Continue with Google",
+    emailLabel: "Email",
+    submitLabel: "Email me a sign-in link",
+    switchPrompt: "New to FounderScope?",
+    switchCta: "Create an account",
+    sentTitle: "Check your inbox.",
+    sentBody: () => "We sent a sign-in link to",
+  },
+  signup: {
+    cardTitle: "Create your account",
+    cardLead: "Start researching companies in seconds.",
+    googleLabel: "Sign up with Google",
+    emailLabel: "Email",
+    submitLabel: "Email me a sign-up link",
+    switchPrompt: "Already have an account?",
+    switchCta: "Sign in",
+    sentTitle: "Check your inbox.",
+    sentBody: () => "We sent a sign-up link to",
+  },
+};
 
 export function LoginForm({ next, initialError }: Props) {
+  const [mode, setMode] = useState<Mode>("signin");
   const [state, setState] = useState<State>({
     stage: "form",
     error: initialError ? errorMessage(initialError) : null,
@@ -51,7 +89,7 @@ export function LoginForm({ next, initialError }: Props) {
         setState({ stage: "form", error: error.message });
         return;
       }
-      setState({ stage: "sent", email: value });
+      setState({ stage: "sent", email: value, mode });
     });
   };
 
@@ -141,17 +179,25 @@ export function LoginForm({ next, initialError }: Props) {
         <section className="flex items-center px-8 pb-12 lg:px-14 lg:py-12">
           <div className="w-full max-w-[420px] mx-auto">
             {state.stage === "form" ? (
-              <FormCard
-                pendingGoogle={pendingGoogle}
-                pendingMagic={pendingMagic}
-                email={email}
-                setEmail={setEmail}
-                onGoogle={handleGoogle}
-                onMagic={handleMagic}
-                error={state.error}
-              />
+              <>
+                <ModeTabs mode={mode} onSelect={(m) => setMode(m)} />
+                <FormCard
+                  copy={COPY[mode]}
+                  pendingGoogle={pendingGoogle}
+                  pendingMagic={pendingMagic}
+                  email={email}
+                  setEmail={setEmail}
+                  onGoogle={handleGoogle}
+                  onMagic={handleMagic}
+                  error={state.error}
+                  onSwitchMode={() =>
+                    setMode(mode === "signin" ? "signup" : "signin")
+                  }
+                />
+              </>
             ) : (
               <SentCard
+                copy={COPY[state.mode]}
                 email={state.email}
                 onReset={() => {
                   setEmail("");
@@ -176,23 +222,76 @@ export function LoginForm({ next, initialError }: Props) {
 
 // ─────────────────────────────────────────────────────────────────────────
 
+function ModeTabs({
+  mode,
+  onSelect,
+}: {
+  mode: Mode;
+  onSelect: (m: Mode) => void;
+}) {
+  return (
+    <div
+      role="tablist"
+      aria-label="Choose sign in or sign up"
+      className="mb-4 flex p-1 rounded-[var(--radius-md)]"
+      style={{
+        background: "var(--bg-elevated)",
+        border: "1px solid var(--border-color)",
+      }}
+    >
+      {(["signin", "signup"] as const).map((m) => {
+        const active = mode === m;
+        return (
+          <button
+            key={m}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            onClick={() => onSelect(m)}
+            className="t-200 flex-1 cursor-pointer rounded-[calc(var(--radius-md)-2px)] py-2"
+            style={{
+              background: active ? "var(--accent-color)" : "transparent",
+              color: active ? "var(--accent-fg)" : "var(--text-muted)",
+              fontFamily: "var(--font-sans)",
+              fontSize: 13,
+              fontWeight: 500,
+              letterSpacing: "-0.005em",
+              border: "none",
+            }}
+          >
+            {m === "signin" ? "Sign in" : "Sign up"}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+
+type Copy = typeof COPY[Mode];
+
 type FormCardProps = {
+  copy: Copy;
   pendingGoogle: boolean;
   pendingMagic: boolean;
   email: string;
   setEmail: (v: string) => void;
   onGoogle: () => void;
   onMagic: (e: React.FormEvent) => void;
+  onSwitchMode: () => void;
   error: string | null;
 };
 
 function FormCard({
+  copy,
   pendingGoogle,
   pendingMagic,
   email,
   setEmail,
   onGoogle,
   onMagic,
+  onSwitchMode,
   error,
 }: FormCardProps) {
   return (
@@ -215,10 +314,10 @@ function FormCard({
           letterSpacing: "-0.01em",
         }}
       >
-        Sign in
+        {copy.cardTitle}
       </h2>
       <p className="small mb-6" style={{ color: "var(--text-muted)" }}>
-        Use Google, or send yourself a magic link.
+        {copy.cardLead}
       </p>
 
       {error ? (
@@ -261,7 +360,7 @@ function FormCard({
         ) : (
           <GoogleGlyph />
         )}
-        <span>Continue with Google</span>
+        <span>{copy.googleLabel}</span>
       </button>
 
       <div
@@ -290,7 +389,7 @@ function FormCard({
           htmlFor="email"
           style={{ color: "var(--text-faint)", fontSize: 10 }}
         >
-          Email
+          {copy.emailLabel}
         </label>
         <div
           className="flex items-center gap-2 px-3 rounded-[var(--radius-md)] t-200"
@@ -352,19 +451,47 @@ function FormCard({
             <Loader2 size={16} className="animate-spin" />
           ) : (
             <>
-              <span>Send magic link</span>
+              <span>{copy.submitLabel}</span>
               <ArrowRight size={15} />
             </>
           )}
         </button>
       </form>
+
+      <p
+        className="small mt-6 text-center"
+        style={{ color: "var(--text-muted)" }}
+      >
+        {copy.switchPrompt}{" "}
+        <button
+          type="button"
+          onClick={onSwitchMode}
+          className="t-200 cursor-pointer"
+          style={{
+            color: "var(--accent-color)",
+            fontWeight: 500,
+            background: "transparent",
+            border: "none",
+          }}
+        >
+          {copy.switchCta}
+        </button>
+      </p>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────
 
-function SentCard({ email, onReset }: { email: string; onReset: () => void }) {
+function SentCard({
+  copy,
+  email,
+  onReset,
+}: {
+  copy: Copy;
+  email: string;
+  onReset: () => void;
+}) {
   return (
     <div
       className="fade-in rounded-[var(--radius-lg)] p-8"
@@ -397,10 +524,10 @@ function SentCard({ email, onReset }: { email: string; onReset: () => void }) {
           letterSpacing: "-0.01em",
         }}
       >
-        Check your inbox.
+        {copy.sentTitle}
       </h2>
       <p className="body-muted mb-1" style={{ fontSize: 14 }}>
-        We sent a sign-in link to
+        {copy.sentBody(email)}
       </p>
       <p
         className="serif mb-6"
