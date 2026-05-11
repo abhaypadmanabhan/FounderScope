@@ -1,12 +1,11 @@
-// Root layout — sidebar shell + search palette provider wraps all pages.
+// Root layout — global providers only. The authenticated app shell (sidebar +
+// search palette) lives in src/app/(home)/layout.tsx so unauthenticated pages
+// like /login and /auth/callback render without it.
 import type { Metadata } from "next";
 import localFont from "next/font/local";
 import { Newsreader } from "next/font/google";
 import "./globals.css";
-import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/app-sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SearchPaletteProvider } from "@/components/search-palette-provider";
 import { Toaster } from "@/components/ui/sonner";
 
 const geistSans = localFont({
@@ -42,15 +41,8 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}
       >
         <TooltipProvider>
-          <SearchPaletteProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <div className="flex flex-1 flex-col min-h-screen">
-                <main className="flex-1">{children}</main>
-              </div>
-            </SidebarProvider>
-            <Toaster richColors position="bottom-right" />
-          </SearchPaletteProvider>
+          {children}
+          <Toaster richColors position="bottom-right" />
         </TooltipProvider>
       </body>
     </html>

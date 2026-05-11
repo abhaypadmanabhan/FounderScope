@@ -91,8 +91,15 @@ export function LoginForm({ next, initialError }: Props) {
               Sign in · v0.4
             </div>
             <h1
-              className="h-1 mb-5 text-balance"
-              style={{ color: "var(--text)" }}
+              className="mb-5 text-balance"
+              style={{
+                color: "var(--text)",
+                fontFamily: "var(--font-serif)",
+                fontWeight: 400,
+                fontSize: 44,
+                lineHeight: 1.08,
+                letterSpacing: "-0.02em",
+              }}
             >
               Your private research
               <br />
@@ -198,8 +205,15 @@ function FormCard({
       }}
     >
       <h2
-        className="h-3 mb-1"
-        style={{ color: "var(--text)", fontWeight: 500 }}
+        className="mb-1"
+        style={{
+          color: "var(--text)",
+          fontFamily: "var(--font-serif)",
+          fontWeight: 500,
+          fontSize: 20,
+          lineHeight: 1.3,
+          letterSpacing: "-0.01em",
+        }}
       >
         Sign in
       </h2>
@@ -373,8 +387,15 @@ function SentCard({ email, onReset }: { email: string; onReset: () => void }) {
         <Mail size={18} style={{ color: "var(--accent-color)" }} />
       </div>
       <h2
-        className="h-3 mb-2"
-        style={{ color: "var(--text)", fontWeight: 500 }}
+        className="mb-2"
+        style={{
+          color: "var(--text)",
+          fontFamily: "var(--font-serif)",
+          fontWeight: 500,
+          fontSize: 20,
+          lineHeight: 1.3,
+          letterSpacing: "-0.01em",
+        }}
       >
         Check your inbox.
       </h2>
