@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { next?: string; error?: string };
+  searchParams: { next?: string; error?: string; detail?: string };
 }) {
   const supabase = supabaseServer(
     cookies() as unknown as Parameters<typeof supabaseServer>[0],
@@ -20,5 +20,11 @@ export default async function LoginPage({
     redirect(searchParams.next ?? "/");
   }
 
-  return <LoginForm next={searchParams.next ?? "/"} initialError={searchParams.error} />;
+  const initialError = searchParams.error
+    ? searchParams.error === "exchange_failed" && searchParams.detail
+      ? `exchange_failed:${searchParams.detail}`
+      : searchParams.error
+    : undefined;
+
+  return <LoginForm next={searchParams.next ?? "/"} initialError={initialError} />;
 }

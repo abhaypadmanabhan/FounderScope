@@ -54,12 +54,12 @@ describe("/auth/callback", () => {
     expect(res.headers.get("location")).toBe("https://app.test/");
   });
 
-  it("redirects to /login?error=link_invalid on exchange failure", async () => {
+  it("redirects to /login with exchange_failed + detail on exchange failure", async () => {
     exchangeMock.mockResolvedValue({ error: { message: "expired" } });
     const res = await GET(makeReq("https://app.test/auth/callback?code=abc"));
     expect(res.status).toBe(307);
-    expect(res.headers.get("location")).toBe(
-      "https://app.test/login?error=link_invalid",
-    );
+    const location = res.headers.get("location") ?? "";
+    expect(location).toContain("/login?error=exchange_failed");
+    expect(location).toContain("detail=expired");
   });
 });

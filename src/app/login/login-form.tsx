@@ -601,7 +601,16 @@ function GoogleGlyph() {
 }
 
 function errorMessage(code: string): string {
+  // Detail-bearing errors arrive as "exchange_failed:<message>".
+  if (code.startsWith("exchange_failed:")) {
+    const detail = code.slice("exchange_failed:".length).trim();
+    return detail
+      ? `Sign-in failed: ${detail}`
+      : "Sign-in failed. Please try again.";
+  }
   switch (code) {
+    case "exchange_failed":
+      return "Sign-in failed during token exchange. Please try again.";
     case "link_invalid":
       return "That magic link expired or was already used. Request a new one below.";
     case "oauth_cancelled":
