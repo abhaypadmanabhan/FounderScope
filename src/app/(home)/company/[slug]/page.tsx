@@ -7,6 +7,11 @@ import { toast } from "sonner";
 import { SECTIONS } from "@/lib/sections/registry";
 import type { Citation, RendererCompany } from "@/lib/sections/types";
 import { RefreshButton } from "@/components/refresh-button";
+import {
+  getCurrentUserId,
+  migrateLegacyKeys,
+  readKey,
+} from "@/lib/api-keys";
 
 type SectionState =
   | { status: "pending" }
@@ -95,13 +100,13 @@ export default function CompanyPage({ params }: PageProps) {
         }
 
         // Cache miss (404), empty shell, or forced refresh — kick off research.
-        const keys = typeof window !== "undefined"
-          ? {
-              anthropic: window.localStorage.getItem("anthropic_api_key"),
-              kimi: window.localStorage.getItem("kimi_api_key"),
-              exa: window.localStorage.getItem("exa_api_key"),
-            }
-          : { anthropic: null, kimi: null, exa: null };
+        const userId = await getCurrentUserId();
+        migrateLegacyKeys(userId);
+        const keys = {
+          anthropic: readKey(userId, "anthropic_api_key"),
+          kimi: readKey(userId, "kimi_api_key"),
+          exa: readKey(userId, "exa_api_key"),
+        };
 
         setPhase("researching");
         await runResearch({

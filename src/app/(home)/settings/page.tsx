@@ -6,6 +6,13 @@ import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { selectProvider } from "@/lib/llm";
+import {
+  getCurrentUserId,
+  migrateLegacyKeys,
+  readKey,
+  writeKey,
+  type KeyName,
+} from "@/lib/api-keys";
 
 const FIELDS = [
   {
@@ -33,15 +40,21 @@ const FIELDS = [
 
 export default function SettingsPage() {
   const [keys, setKeys] = useState<Record<string, string>>({});
+  const [userId, setUserId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
-    const loaded: Record<string, string> = {};
-    for (const f of FIELDS) {
-      loaded[f.storageKey] = window.localStorage.getItem(f.storageKey) ?? "";
-    }
-    setKeys(loaded);
-    setHydrated(true);
+    (async () => {
+      const id = await getCurrentUserId();
+      migrateLegacyKeys(id);
+      const loaded: Record<string, string> = {};
+      for (const f of FIELDS) {
+        loaded[f.storageKey] = readKey(id, f.storageKey as KeyName) ?? "";
+      }
+      setUserId(id);
+      setKeys(loaded);
+      setHydrated(true);
+    })();
   }, []);
 
   const routing = hydrated
@@ -79,11 +92,11 @@ export default function SettingsPage() {
             value={keys[f.storageKey] ?? ""}
             onChange={(v) => setKeys((s) => ({ ...s, [f.storageKey]: v }))}
             onSave={(v) => {
-              window.localStorage.setItem(f.storageKey, v);
+              writeKey(userId, f.storageKey as KeyName, v);
               toast.success(`${f.label} saved`);
             }}
             onClear={() => {
-              window.localStorage.removeItem(f.storageKey);
+              writeKey(userId, f.storageKey as KeyName, "");
               setKeys((s) => ({ ...s, [f.storageKey]: "" }));
               toast.success(`${f.label} cleared`);
             }}
