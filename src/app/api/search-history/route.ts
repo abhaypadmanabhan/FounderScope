@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { z } from "zod";
 import { supabaseServer } from "@/lib/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -75,16 +76,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "invalid_body" }, { status: 400 });
   }
 
-  const { data: company, error: companyErr } = await supabase
+  // companies is a shared cache (no RLS). Use the admin client so we don't
+  // depend on anon-role SELECT grants being in place on every project.
+  const { data: company, error: companyErr } = await supabaseAdmin
     .from("companies")
     .select("id")
     .eq("slug", body.slug)
     .maybeSingle();
 
   if (companyErr) {
+    console.error("[search-history POST] companies lookup failed", companyErr);
     return NextResponse.json({ error: companyErr.message }, { status: 500 });
   }
   if (!company) {
+    console.error("[search-history POST] company not found for slug", body.slug);
     return NextResponse.json({ error: "company_not_found" }, { status: 404 });
   }
 
@@ -100,6 +105,7 @@ export async function POST(request: Request) {
     );
 
   if (upsertErr) {
+    console.error("[search-history POST] upsert failed", upsertErr);
     return NextResponse.json({ error: upsertErr.message }, { status: 500 });
   }
 

@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const getUserMock = vi.fn();
 const fromMock = vi.fn();
+const adminFromMock = vi.fn();
 
 vi.mock("next/headers", () => ({
   cookies: () => ({ get: () => undefined, set: vi.fn(), getAll: () => [] }),
@@ -14,11 +15,18 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }));
 
+vi.mock("@/lib/supabase/admin", () => ({
+  supabaseAdmin: {
+    from: (...args: unknown[]) => adminFromMock(...args),
+  },
+}));
+
 import { GET, POST } from "@/app/api/search-history/route";
 
 beforeEach(() => {
   getUserMock.mockReset();
   fromMock.mockReset();
+  adminFromMock.mockReset();
 });
 
 describe("GET /api/search-history", () => {
@@ -77,8 +85,12 @@ describe("POST /api/search-history", () => {
     const eq = vi.fn().mockReturnValue({ maybeSingle });
     const select = vi.fn().mockReturnValue({ eq });
 
-    fromMock.mockImplementation((table: string) => {
+    // companies lookup goes through the admin client now.
+    adminFromMock.mockImplementation((table: string) => {
       if (table === "companies") return { select };
+      throw new Error(`unexpected admin table ${table}`);
+    });
+    fromMock.mockImplementation((table: string) => {
       if (table === "search_history") return { upsert };
       throw new Error(`unexpected table ${table}`);
     });

@@ -30,12 +30,22 @@ function logVisit(slug: string) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ slug }),
   })
-    .then((res) => {
-      if (res.ok && typeof window !== "undefined") {
-        window.dispatchEvent(new Event("recents:updated"));
+    .then(async (res) => {
+      if (res.ok) {
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(new Event("recents:updated"));
+        }
+        return;
       }
+      const body = await res.text().catch(() => "");
+      console.error("[logVisit] failed", res.status, body);
+      toast.error(
+        `Couldn't add ${slug} to sidebar (${res.status}). ${body.slice(0, 120)}`,
+      );
     })
-    .catch(() => undefined);
+    .catch((err) => {
+      console.error("[logVisit] network error", err);
+    });
 }
 
 export default function CompanyPage({ params }: PageProps) {
