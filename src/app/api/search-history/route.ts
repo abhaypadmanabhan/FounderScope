@@ -32,9 +32,14 @@ export async function GET() {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  const { data, error } = await supabase
+  // Admin client for the read — the companies table relies on service-role
+  // grants (mirrors POST), so an anon-client join returns null companies and
+  // the entries get filtered to nothing. Scope is enforced by the explicit
+  // user_id filter below, not RLS.
+  const { data, error } = await supabaseAdmin
     .from("search_history")
     .select("searched_at, companies!inner(slug, display_name)")
+    .eq("user_id", userData.user.id)
     .order("searched_at", { ascending: false })
     .limit(8);
 
