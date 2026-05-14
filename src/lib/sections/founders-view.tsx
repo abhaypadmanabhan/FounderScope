@@ -268,17 +268,31 @@ function buildSheetLinks(f: Founder): SheetLink[] {
   return out;
 }
 
-function SheetSectionDivider({ children }: { children: React.ReactNode }) {
+function SheetBlock({
+  eyebrow,
+  children,
+  divider = true,
+}: {
+  eyebrow: string;
+  children: React.ReactNode;
+  divider?: boolean;
+}) {
   return (
-    <div
+    <section
       style={{
-        borderTop: "1px solid var(--border-faint)",
-        paddingTop: 18,
-        marginBottom: 26,
+        borderTop: divider ? "1px solid var(--border-faint)" : "none",
+        paddingTop: divider ? 22 : 0,
+        marginBottom: 28,
       }}
     >
+      <div
+        className="eyebrow"
+        style={{ marginBottom: 12, color: "var(--text-quiet)" }}
+      >
+        {eyebrow}
+      </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -293,105 +307,91 @@ function FounderSheetBody({
   const hasMeta = founder.college || founder.prior_companies.length > 0;
 
   return (
-    <div className="overflow-y-auto h-full" style={{ padding: "32px 28px" }}>
-      <div className="flex items-start gap-4" style={{ marginBottom: 26 }}>
-        <FounderAvatar founder={founder} size={84} />
-        <div className="pt-1 min-w-0">
-          <SheetTitle
-            className="h-2 m-0"
-            style={{
-              fontWeight: 400,
-              color: "var(--text)",
-              marginBottom: 4,
-            }}
-          >
-            {founder.name}
-          </SheetTitle>
-          <RoleLine role={founder.role} technical={founder.technical} size={14} />
-        </div>
-      </div>
+    <div
+      className="overflow-y-auto h-full"
+      style={{ padding: "44px 36px 56px" }}
+    >
+      {/* Header — generous header band with serif headline */}
+      <header style={{ marginBottom: 36 }}>
+        <FounderAvatar founder={founder} size={88} />
+        <SheetTitle
+          className="m-0"
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontWeight: 400,
+            fontSize: 38,
+            lineHeight: 1.05,
+            letterSpacing: "-0.022em",
+            color: "var(--text)",
+            marginTop: 22,
+            marginBottom: 8,
+          }}
+        >
+          {founder.name}
+        </SheetTitle>
+        <RoleLine role={founder.role} technical={founder.technical} size={14} />
+      </header>
 
-      {hasMeta && (
-        <SheetSectionDivider>
-          {founder.college && (
-            <div style={{ marginBottom: founder.prior_companies.length > 0 ? 18 : 0 }}>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>
-                Education
-              </div>
-              <div style={{ fontSize: 14, color: "var(--text)" }}>
-                {founder.college}
-              </div>
-            </div>
-          )}
-          {founder.prior_companies.length > 0 && (
-            <div>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>
-                Previously
-              </div>
-              <ul
-                className="m-0 p-0 list-none"
-                style={{ color: "var(--text)" }}
-              >
-                {founder.prior_companies.map((c, i) => (
-                  <li
-                    key={i}
-                    style={{
-                      fontSize: 14,
-                      padding: "6px 0",
-                      borderTop: i === 0 ? "none" : "1px solid var(--border-faint)",
-                    }}
-                  >
-                    {c}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </SheetSectionDivider>
-      )}
-
-      <SheetSectionDivider>
-        <div className="eyebrow" style={{ marginBottom: 8 }}>
-          What they bring
-        </div>
-        <p style={{ fontSize: 15, lineHeight: 1.6, color: "var(--text)", margin: 0 }}>
-          {founder.what_they_bring}
-        </p>
-      </SheetSectionDivider>
-
-      <SheetSectionDivider>
-        <div className="eyebrow" style={{ marginBottom: 10 }}>
-          Bio
-        </div>
+      {/* Bring — opens with the editorial pull-quote, no divider above */}
+      <SheetBlock eyebrow="What they bring" divider={false}>
         <p
           style={{
             fontFamily: "var(--font-serif)",
-            fontSize: 16,
-            lineHeight: 1.65,
+            fontStyle: "italic",
+            fontSize: 18,
+            lineHeight: 1.55,
+            color: "var(--text)",
+            margin: 0,
+            paddingLeft: 16,
+            borderLeft: "2px solid var(--accent-border)",
+          }}
+        >
+          {founder.what_they_bring}
+        </p>
+      </SheetBlock>
+
+      {/* Bio — serif body, the centrepiece */}
+      <SheetBlock eyebrow="Bio">
+        <p
+          style={{
+            fontFamily: "var(--font-serif)",
+            fontSize: 17,
+            lineHeight: 1.68,
             color: "var(--text)",
             margin: 0,
           }}
         >
           {renderProseWithCitations(founder.full_bio, citations)}
         </p>
-      </SheetSectionDivider>
+      </SheetBlock>
 
-      {links.length > 0 && (
-        <div
-          style={{
-            borderTop: "1px solid var(--border-faint)",
-            paddingTop: 18,
-          }}
-        >
-          <div className="eyebrow" style={{ marginBottom: 10 }}>
-            Links
+      {/* Meta — same MetaRow rhythm as the card */}
+      {hasMeta && (
+        <SheetBlock eyebrow="Background">
+          <div className="space-y-3">
+            {founder.college && (
+              <MetaRow label="Education" value={founder.college} />
+            )}
+            {founder.prior_companies.length > 0 && (
+              <MetaRow
+                label="Previously"
+                value={founder.prior_companies.join(", ")}
+              />
+            )}
           </div>
+        </SheetBlock>
+      )}
+
+      {/* Links — eyebrow label · mono host */}
+      {links.length > 0 && (
+        <SheetBlock eyebrow="Links">
           <ul className="m-0 p-0 list-none">
             {links.map(({ label, hint, url }, i) => (
               <li
                 key={label}
                 style={{
-                  borderTop: i === 0 ? "none" : "1px solid var(--border-faint)",
+                  borderTop:
+                    i === 0 ? "none" : "1px solid var(--border-faint)",
                 }}
               >
                 <a
@@ -400,7 +400,7 @@ function FounderSheetBody({
                   rel="noopener noreferrer"
                   className="flex items-baseline justify-between t-200"
                   style={{
-                    padding: "9px 0",
+                    padding: "11px 0",
                     fontSize: 14,
                     color: "var(--text)",
                     textDecoration: "none",
@@ -431,7 +431,7 @@ function FounderSheetBody({
               </li>
             ))}
           </ul>
-        </div>
+        </SheetBlock>
       )}
     </div>
   );
