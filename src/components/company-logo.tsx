@@ -1,4 +1,6 @@
-// Company logo — prefer stored EXA URL, fall back to Clearbit, then serif initial.
+// Company logo — prefer stored EXA URL, fall back to Google favicon API, then serif initial.
+// Google's favicon endpoint always returns *something* (default globe icon if no logo found),
+// so we don't get console-noise DNS errors like Clearbit's redirect-to-domain pattern produces.
 "use client";
 import { useState } from "react";
 
@@ -9,11 +11,11 @@ interface Props {
   size?: number;
 }
 
-type Step = "primary" | "clearbit" | "initial";
+type Step = "primary" | "favicon" | "initial";
 
 function initialStep(logoUrl: string | null | undefined, domain: string | null | undefined): Step {
   if (logoUrl) return "primary";
-  if (domain) return "clearbit";
+  if (domain) return "favicon";
   return "initial";
 }
 
@@ -25,15 +27,15 @@ export function CompanyLogo({ name, domain, logoUrl, size = 64 }: Props) {
   const src =
     step === "primary"
       ? (logoUrl as string)
-      : step === "clearbit"
-        ? `https://logo.clearbit.com/${domain}`
+      : step === "favicon"
+        ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain ?? "")}&sz=128`
         : null;
 
   const onError = () => {
     setLoaded(false);
     if (step === "primary") {
-      setStep(domain ? "clearbit" : "initial");
-    } else if (step === "clearbit") {
+      setStep(domain ? "favicon" : "initial");
+    } else if (step === "favicon") {
       setStep("initial");
     }
   };
