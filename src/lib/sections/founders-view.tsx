@@ -135,6 +135,29 @@ function RoleLine({
   );
 }
 
+function MetaRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3">
+      <span
+        className="eyebrow"
+        style={{ flexShrink: 0, minWidth: 76, color: "var(--text-quiet)" }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: 13,
+          lineHeight: 1.5,
+          color: "var(--text-muted)",
+          minWidth: 0,
+        }}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
 function FounderCard({
   founder,
   onClick,
@@ -142,71 +165,73 @@ function FounderCard({
   founder: Founder;
   onClick: () => void;
 }) {
+  const hasMeta = founder.college || founder.prior_companies.length > 0;
   return (
     <button
       type="button"
       onClick={onClick}
-      className="text-left w-full block t-200"
+      className="group text-left w-full block t-200 relative"
       style={{
-        padding: "22px 0",
+        padding: "28px 0 30px",
         background: "transparent",
         borderTop: "1px solid var(--border-faint)",
         cursor: "pointer",
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderTopColor = "var(--border-strong)";
+        e.currentTarget.style.borderTopColor = "var(--accent-border)";
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.borderTopColor = "var(--border-faint)";
       }}
     >
-      <div className="flex items-start gap-4">
-        <FounderAvatar founder={founder} size={52} />
+      <div className="flex items-start gap-5">
+        <FounderAvatar founder={founder} size={56} />
         <div className="flex-1 min-w-0">
           <h3
-            className="h-3 m-0"
+            className="m-0 t-200"
             style={{
-              fontSize: 22,
+              fontFamily: "var(--font-serif)",
+              fontSize: 24,
               lineHeight: 1.18,
-              letterSpacing: "-0.015em",
+              letterSpacing: "-0.018em",
               color: "var(--text)",
               fontWeight: 400,
-              marginBottom: 2,
+              marginBottom: 4,
             }}
           >
             {founder.name}
           </h3>
-          <div style={{ marginBottom: 12 }}>
+          <div style={{ marginBottom: hasMeta ? 18 : 16 }}>
             <RoleLine role={founder.role} technical={founder.technical} />
           </div>
 
-          {founder.college && (
+          {hasMeta && (
             <div
-              className="micro"
-              style={{
-                color: "var(--text-muted)",
-                marginBottom: 4,
-                letterSpacing: "0.02em",
-              }}
+              className="space-y-2"
+              style={{ marginBottom: 18 }}
             >
-              {founder.college}
+              {founder.college && (
+                <MetaRow label="Education" value={founder.college} />
+              )}
+              {founder.prior_companies.length > 0 && (
+                <MetaRow
+                  label="Previously"
+                  value={founder.prior_companies.join(", ")}
+                />
+              )}
             </div>
           )}
-          {founder.prior_companies.length > 0 && (
-            <div
-              className="small"
-              style={{ color: "var(--text-muted)", marginBottom: 12 }}
-            >
-              <span style={{ color: "var(--text-faint)" }}>Previously: </span>
-              {founder.prior_companies.join(", ")}
-            </div>
-          )}
+
           <p
             style={{
-              fontSize: 14,
-              lineHeight: 1.55,
+              fontFamily: "var(--font-serif)",
+              fontStyle: "italic",
+              fontSize: 15,
+              lineHeight: 1.6,
               color: "var(--text)",
               margin: 0,
+              paddingLeft: 12,
+              borderLeft: "2px solid var(--accent-border)",
             }}
           >
             {founder.what_they_bring}
@@ -421,8 +446,8 @@ export const FoundersRenderer: React.FC<RendererProps<FoundersOutput>> = ({
   const selected = openIdx !== null ? data.founders[openIdx] : null;
 
   return (
-    <SectionShell eyebrow={section.title} n={padOrder(section.order)}>
-      <div className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-10">
+    <SectionShell eyebrow={section.title} n={padOrder(section.order)} width="wide">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-14">
         {data.founders.map((f, i) => (
           <FounderCard
             key={`${f.name}-${i}`}
@@ -457,22 +482,25 @@ export const FoundersRenderer: React.FC<RendererProps<FoundersOutput>> = ({
 };
 
 export const FoundersSkeletonRenderer: React.FC = () => (
-  <div className="grid grid-cols-1 sm:grid-cols-2 sm:gap-x-10">
+  <div className="grid grid-cols-1 lg:grid-cols-2 gap-x-14">
     {[0, 1].map((i) => (
       <div
         key={i}
         style={{
-          padding: "22px 0",
+          padding: "28px 0 30px",
           borderTop: "1px solid var(--border-faint)",
         }}
       >
-        <div className="flex items-start gap-4">
-          <Skeleton className="rounded-full" style={{ width: 52, height: 52 }} />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-5 w-2/3" />
+        <div className="flex items-start gap-5">
+          <Skeleton className="rounded-full" style={{ width: 56, height: 56 }} />
+          <div className="flex-1 space-y-3 min-w-0">
+            <Skeleton className="h-6 w-2/3" />
             <Skeleton className="h-3 w-1/3" />
-            <Skeleton className="h-3 w-3/4" />
-            <Skeleton className="h-3 w-5/6 mt-3" />
+            <div className="pt-2 space-y-2">
+              <Skeleton className="h-3 w-3/4" />
+              <Skeleton className="h-3 w-2/3" />
+            </div>
+            <Skeleton className="h-4 w-5/6 mt-3" />
           </div>
         </div>
       </div>
