@@ -383,10 +383,10 @@ function cannedJsonForPrompt(prompt: string): string {
         },
       ],
       replicability: {
-        data_score: 6,
-        network_score: 7,
-        distribution_score: 3,
-        regulatory_score: 5,
+        data_score: 5,
+        network_score: 4,
+        distribution_score: 8,
+        regulatory_score: 6,
         reasoning: {
           data: "Fraud signals across millions of merchants are real but Adyen and PayPal have comparable surfaces.",
           network: "Mostly one-sided — a new user joining doesn't make checkout better for the next.",

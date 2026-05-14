@@ -1,25 +1,25 @@
 // Giant serif aggregate replicability score with founder-semantics color scale.
-// High score = easy to rebuild = green (go). Low = walk away = red.
+// Low score = easy to rebuild = green (go). High = walk away = red.
 import React from "react";
 
 const TOKENS = [
-  "var(--rep-red)",
-  "var(--rep-rust)",
-  "var(--rep-amber)",
-  "var(--rep-olive)",
   "var(--rep-green)",
+  "var(--rep-olive)",
+  "var(--rep-amber)",
+  "var(--rep-rust)",
+  "var(--rep-red)",
 ] as const;
 
 const LABELS = [
-  "walk away",
-  "uphill battle",
-  "narrowing window",
-  "achievable",
   "easy to rebuild",
+  "achievable",
+  "narrowing window",
+  "uphill battle",
+  "walk away",
 ] as const;
 
 export function colorForScore(score: number): string {
-  // 1-2 red, 3-4 rust, 5-6 amber, 7-8 olive, 9-10 green
+  // 1-2 green, 3-4 olive, 5-6 amber, 7-8 rust, 9-10 red
   const idx = Math.min(4, Math.max(0, Math.floor((score - 1) / 2)));
   return TOKENS[idx];
 }

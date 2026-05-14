@@ -453,7 +453,7 @@ export const moat: SectionDefinition<Output> = {
   title: "Moat & Replicability",
   order: 2,
   cacheTtlDays: 30,
-  schemaVersion: 3,
+  schemaVersion: 2,
   tier: "reasoning",
   buildPrompt: (c) =>
     buildSectionPrompt({
@@ -467,16 +467,16 @@ MOAT TYPES — pick all that apply. 'none' is a valid answer for companies whose
 
 COMPOUNDING MOMENTS — 0 to 5 specific events with years that made the moat real. Not 'launched product' — 'shipped X which created Y data asset that competitors now can't reproduce because Z'. Compounding moments without verifiable sources are still valid: set citation_url: null, inferred: true, and explain in why_it_compounded what the evidence basis is (e.g. 'observable from public hiring patterns', 'inferred from changelog history'). Empty array is also valid for companies too young to have compounding moments yet — explain why in moat_summary (e.g. 'founded 2025, pre-product, no compounding events to assess yet'). Never invent a URL; null + inferred=true is honest, fabricated URLs are not.
 
-REPLICABILITY SCORES — score 1-10 on each axis with a confidence rating. HIGHER score = EASIER to replicate (a competitor could rebuild this axis from scratch). LOWER score = HARDER to replicate (this axis is a real moat). The UI maps high→green ("go for it") and low→red ("walk away"). Rubric:
+REPLICABILITY SCORES — score 1-10 on each axis with a confidence rating. Lower score = easier to replicate. Rubric:
   - data (30% weight): is the proprietary data hard to reproduce?
-    1 = decades of unique behavioral data that requires platform scale to collect. 10 = trivial public data.
+    1 = trivial public data. 10 = decades of unique behavioral data that requires platform scale to collect.
   - network (30%): does each user make the product more valuable for the next?
-    1 = global liquidity network like Visa. 10 = no network effect.
+    1 = no network effect. 10 = global liquidity network like Visa.
   - distribution (20%): durable GTM advantage?
-    1 = embedded in OS, browser, or default workflow. 10 = paid ads only.
+    1 = paid ads only. 10 = embedded in OS, browser, or default workflow.
   - regulatory (20%): license, capital, or compliance barriers?
-    1 = bank charter, FDA approval, telecom license. 10 = none.
-    Score the regulatory axis honestly. If no regulatory moat exists (unregulated category, pre-revenue, too early to attract regulation), score 9-10 with confidence: "high" and reasoning that says so plainly. Don't conflate "no moat" with "low confidence" — they're different signals. A confident 10 means "I am sure there is no regulatory barrier here". A "low" confidence on this axis means "I'm not sure whether there's a barrier", which is different.
+    1 = none. 10 = bank charter, FDA approval, telecom license.
+    Score the regulatory axis honestly. If no regulatory moat exists (unregulated category, pre-revenue, too early to attract regulation), score 1-2 with confidence: "high" and reasoning that says so plainly. Don't conflate "no moat" with "low confidence" — they're different signals. A confident 2 means "I am sure there is no regulatory barrier here". A "low" confidence on this axis means "I'm not sure whether there's a barrier", which is different.
 
 Confidence semantics for ALL axes:
   - "high" = enough public signal to be confident in the score (either way — a confident 2 is fine).
@@ -526,10 +526,10 @@ CLAIMS — every concrete fact (founding year, key customer, technical detail, m
           },
         ],
         replicability: {
-          data_score: 6,
-          network_score: 7,
-          distribution_score: 3,
-          regulatory_score: 5,
+          data_score: 5,
+          network_score: 4,
+          distribution_score: 8,
+          regulatory_score: 6,
           reasoning: {
             data:
               "Fraud signals across millions of merchants are real but Adyen and PayPal have comparable surfaces. Not unreproducible.",

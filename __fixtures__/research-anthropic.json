@@ -106,10 +106,10 @@
           }
         ],
         "replicability": {
-          "data_score": 5,
-          "network_score": 8,
-          "distribution_score": 4,
-          "regulatory_score": 6,
+          "data_score": 6,
+          "network_score": 3,
+          "distribution_score": 7,
+          "regulatory_score": 5,
           "reasoning": {
             "data": "RLHF preference data from millions of conversations is genuinely hard to reproduce. But OpenAI and Google have comparable or larger corpuses. The Constitutional AI training recipes are the real differentiator, not raw data volume.",
             "network": "Minimal network effects. More users don't make Claude better for the next user in any direct way. Indirect data flywheel exists but is table stakes for any frontier lab.",
