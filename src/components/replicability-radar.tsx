@@ -72,7 +72,11 @@ function ConfidenceDot({ cx, cy, payload }: DotProps) {
 export function ReplicabilityRadar({ axes, height = 240 }: Props) {
   return (
     <div style={{ width: "100%", height, minWidth: 0 }}>
-      <ResponsiveContainer width="100%" height="100%">
+      <ResponsiveContainer
+        width="100%"
+        height="100%"
+        initialDimension={{ width: 320, height }}
+      >
         <RadarChart
           data={axes}
           outerRadius="78%"
