@@ -45,7 +45,7 @@ function EndpointDot({ cx, cy, isLast }: DotProps) {
 export function HeadcountSparkline({ data, height = 80 }: Props) {
   const last = data.length - 1;
   return (
-    <div style={{ width: "100%", height }}>
+    <div style={{ width: "100%", height, minWidth: 0 }}>
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 10, right: 36, bottom: 22, left: 0 }}>
           <XAxis
