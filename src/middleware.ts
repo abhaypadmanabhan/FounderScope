@@ -18,7 +18,11 @@ export async function middleware(request: NextRequest) {
 export const config = {
   // Whitelist-by-exclusion. Pages that absolutely must never redirect (login,
   // callback) are excluded; everything else gets the session-refresh + gate.
+  // The trailing extension group keeps public static assets (brand mark, the
+  // app-router icon.png/apple-icon.png, fonts) from being auth-gated — without
+  // it, an unauthenticated <img src="/founderscope-mark.png"> gets redirected
+  // to /login and renders the login HTML instead of the image.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|fonts|login|auth/callback|api/auth).*)",
+    "/((?!_next/static|_next/image|favicon.ico|fonts|login|auth/callback|api/auth|.*\\.(?:png|jpg|jpeg|gif|svg|webp|ico|woff2?|ttf|otf)$).*)",
   ],
 };
