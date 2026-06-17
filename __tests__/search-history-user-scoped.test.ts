@@ -36,8 +36,9 @@ describe("GET /api/search-history", () => {
     expect(res.status).toBe(401);
   });
 
-  it("queries search_history via the auth-cookie client", async () => {
+  it("queries search_history via the admin client, scoped by user_id", async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: "u1" } } });
+    // Route chain: admin.from(...).select(...).eq("user_id", id).order(...).limit(8)
     const limit = vi.fn().mockResolvedValue({
       data: [
         {
@@ -48,8 +49,9 @@ describe("GET /api/search-history", () => {
       error: null,
     });
     const order = vi.fn().mockReturnValue({ limit });
-    const select = vi.fn().mockReturnValue({ order });
-    fromMock.mockReturnValue({ select });
+    const eq = vi.fn().mockReturnValue({ order });
+    const select = vi.fn().mockReturnValue({ eq });
+    adminFromMock.mockReturnValue({ select });
 
     const res = await GET();
     expect(res.status).toBe(200);
@@ -61,7 +63,10 @@ describe("GET /api/search-history", () => {
         searched_at: "2026-05-11T10:00:00Z",
       },
     ]);
-    expect(fromMock).toHaveBeenCalledWith("search_history");
+    expect(adminFromMock).toHaveBeenCalledWith("search_history");
+    expect(eq).toHaveBeenCalledWith("user_id", "u1");
+    // GET must not read through the user-scoped client (admin + explicit filter).
+    expect(fromMock).not.toHaveBeenCalled();
   });
 });
 

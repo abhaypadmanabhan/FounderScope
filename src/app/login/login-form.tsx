@@ -117,7 +117,7 @@ export function LoginForm({ next, initialError }: Props) {
         className="pointer-events-none absolute inset-0"
         style={{
           background:
-            "radial-gradient(1100px 600px at 12% -10%, rgba(179, 85, 74, 0.08), transparent 60%), radial-gradient(900px 500px at 110% 110%, rgba(179, 85, 74, 0.05), transparent 55%)",
+            "radial-gradient(1100px 600px at 12% -10%, rgba(192, 121, 43, 0.10), transparent 60%), radial-gradient(900px 500px at 110% 110%, rgba(192, 121, 43, 0.06), transparent 55%)",
         }}
       />
 
@@ -338,8 +338,8 @@ function FormCard({
           role="alert"
           className="mb-5 px-3 py-2.5 rounded-[var(--radius-md)] small"
           style={{
-            background: "rgba(143, 61, 51, 0.10)",
-            border: "1px solid rgba(143, 61, 51, 0.30)",
+            background: "rgba(192, 121, 43, 0.10)",
+            border: "1px solid rgba(192, 121, 43, 0.30)",
             color: "var(--accent-color)",
           }}
         >

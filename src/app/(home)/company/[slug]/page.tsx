@@ -5,6 +5,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { SECTIONS } from "@/lib/sections/registry";
+import { padOrder } from "@/lib/sections/format";
 import type { Citation, RendererCompany } from "@/lib/sections/types";
 import { RefreshButton } from "@/components/refresh-button";
 import {
@@ -62,6 +63,7 @@ export default function CompanyPage({ params }: PageProps) {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
   const [everCompleted, setEverCompleted] = useState(false);
+  const [completedAt, setCompletedAt] = useState<Date | null>(null);
   const prevSectionsRef = useRef<Record<string, SectionState> | null>(null);
   const isRefresh = refreshKey > 0;
 
@@ -98,6 +100,7 @@ export default function CompanyPage({ params }: PageProps) {
               setSections(map);
               setPhase("done");
               setEverCompleted(true);
+              setCompletedAt(new Date());
               logVisit(slug);
               return;
             }
@@ -130,6 +133,7 @@ export default function CompanyPage({ params }: PageProps) {
           onDone: () => {
             setPhase("done");
             setEverCompleted(true);
+            setCompletedAt(new Date());
             prevSectionsRef.current = null;
             logVisit(slug);
           },
@@ -187,6 +191,14 @@ export default function CompanyPage({ params }: PageProps) {
 
   const refreshDisabled = phase === "researching" || phase === "loading" || phase === "needs_key";
   const hasCachedReport = everCompleted;
+  // The section currently being streamed gets the live amber tick.
+  const firstPendingKey = useMemo(
+    () =>
+      phase === "researching"
+        ? SECTIONS.find((s) => sections[s.key]?.status === "pending")?.key
+        : undefined,
+    [phase, sections],
+  );
 
   return (
     <div>
@@ -199,8 +211,8 @@ export default function CompanyPage({ params }: PageProps) {
         }}
       >
         <div
-          className="flex items-center gap-2.5 text-xs"
-          style={{ color: "var(--text-faint)" }}
+          className="flex items-center gap-2.5 font-mono uppercase"
+          style={{ color: "var(--text-faint)", fontSize: 10.5, letterSpacing: "0.1em" }}
         >
           {phase === "done" && (isRefresh ? "Re-researched · cache overwritten" : "Cached · loaded from store")}
           {phase === "researching" && (isRefresh ? "Re-researching live · streaming sections" : "Researching live · streaming sections")}
@@ -265,8 +277,24 @@ export default function CompanyPage({ params }: PageProps) {
         {SECTIONS.map((section) => {
           const state = sections[section.key];
           if (state.status === "pending") {
+            const active = section.key === firstPendingKey;
             return (
-              <div key={section.key} className="mb-[88px]">
+              <div key={section.key} data-report-section className="relative mb-[88px]">
+                {active && (
+                  <>
+                    <span
+                      aria-hidden
+                      className="absolute top-1 bottom-1 w-0.5"
+                      style={{ left: -20, background: "var(--accent-color)" }}
+                    />
+                    <span
+                      className="eyebrow"
+                      style={{ display: "block", marginBottom: 14, color: "var(--accent-color)" }}
+                    >
+                      Researching…
+                    </span>
+                  </>
+                )}
                 <section.SkeletonRenderer />
               </div>
             );
@@ -275,6 +303,7 @@ export default function CompanyPage({ params }: PageProps) {
             return (
               <div
                 key={section.key}
+                data-report-section
                 className="mb-[88px] rounded-md p-3 text-sm"
                 style={{
                   border: "1px solid hsl(var(--destructive) / 0.4)",
@@ -293,7 +322,7 @@ export default function CompanyPage({ params }: PageProps) {
             section: { key: string; title: string; order: number };
           }>;
           return (
-            <div key={section.key} className="fade-in">
+            <div key={section.key} data-report-section className="fade-in">
               <Renderer
                 data={state.content}
                 citations={(state.citations as Citation[]) ?? []}
@@ -307,9 +336,91 @@ export default function CompanyPage({ params }: PageProps) {
             </div>
           );
         })}
+
+        {everCompleted && (
+          <footer
+            className="mt-6 pt-5 flex items-center justify-between gap-4"
+            style={{ borderTop: "1px solid var(--border-faint)" }}
+          >
+            <span
+              className="font-mono uppercase"
+              style={{ fontSize: 10.5, letterSpacing: "0.12em", color: "var(--text-quiet)" }}
+            >
+              Founderscope · Company Report
+            </span>
+            {completedAt && (
+              <span
+                className="font-mono uppercase"
+                style={{ fontSize: 10.5, letterSpacing: "0.08em", color: "var(--text-quiet)" }}
+              >
+                Updated {formatStamp(completedAt)} UTC
+              </span>
+            )}
+          </footer>
+        )}
       </main>
+
+      {everCompleted && <ReportPager />}
     </div>
   );
+}
+
+// Fixed bottom-right pager — advances to the next report section, hides at the
+// end of the report. Mirrors the north-star "NEXT SECTION →" affordance.
+function ReportPager() {
+  const [atEnd, setAtEnd] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => {
+      const nearBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 96;
+      setAtEnd((prev) => (prev === nearBottom ? prev : nearBottom));
+    };
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
+  const goNext = () => {
+    const threshold = window.scrollY + 128;
+    const sections = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-report-section]")
+    );
+    const next = sections.find(
+      (el) => el.getBoundingClientRect().top + window.scrollY > threshold + 8
+    );
+    if (next) next.scrollIntoView({ behavior: "smooth", block: "start" });
+    else window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
+  };
+
+  if (atEnd) return null;
+
+  return (
+    <button
+      type="button"
+      onClick={goNext}
+      className="fixed bottom-6 right-6 z-30 inline-flex items-center gap-2 rounded-md px-3.5 py-2 font-mono uppercase transition-all hover:bg-accent/90"
+      style={{
+        background: "var(--accent-color)",
+        color: "var(--accent-fg)",
+        fontSize: 11,
+        letterSpacing: "0.1em",
+        boxShadow: "var(--shadow-pop)",
+      }}
+    >
+      Next section <span aria-hidden>→</span>
+    </button>
+  );
+}
+
+function formatStamp(d: Date): string {
+  const date = `${padOrder(d.getUTCMonth() + 1)}.${padOrder(d.getUTCDate())}.${padOrder(d.getUTCFullYear() % 100)}`;
+  const time = `${padOrder(d.getUTCHours())}:${padOrder(d.getUTCMinutes())}:${padOrder(d.getUTCSeconds())}`;
+  return `${date} · ${time}`;
 }
 
 type RunResearchArgs = {

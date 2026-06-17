@@ -1,0 +1,38 @@
+{
+  "name": "founderscope",
+  "category": "research",
+  "ground": "dark",
+  "description": "Editorial company-research tool. Fusion language: serif-display warmth over Padzy structural discipline (mono data, numbered kickers, hairline grids, one accent tick).",
+  "roles": {
+    "ground": "#101012",
+    "surface": "#17171a",
+    "ink": "#e8e8ea",
+    "muted": "#9a9aa1",
+    "accent": "#c0792b"
+  },
+  "accent": {
+    "name": "amber / ochre",
+    "dark": "#c0792b",
+    "light": "#a4651f",
+    "fgOnAccentDark": "#1a1206",
+    "fgOnAccentLight": "#ffffff",
+    "note": "Amber #c0792b on charcoal #101012 ≈ 6:1 (AA text). White-on-amber fails, so amber fills use dark ink."
+  },
+  "type": {
+    "display": "Fraunces (serif)",
+    "body": "Geist Sans",
+    "mono": "DM Mono"
+  },
+  "overrides": [
+    "Serif display (Fraunces) instead of the Padzy default PP Neue Machina — confirmed product override.",
+    "No signature motif — the Padzy node/bracket mark is deliberately dropped; brand uses the amber brushstroke 'F'.",
+    "Hybrid numerals: large display numerals stay serif; all inline data/units/timestamps/IDs are mono."
+  ],
+  "invariants": {
+    "monoData": true,
+    "numberedKicker": "01 / TITLE",
+    "hairlineStructure": true,
+    "accentTick": "2px amber on active/selected/running",
+    "oneAccent": true
+  }
+}

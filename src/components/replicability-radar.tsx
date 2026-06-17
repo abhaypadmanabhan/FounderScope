@@ -104,7 +104,7 @@ export function ReplicabilityRadar({ axes, height = 240 }: Props) {
             stroke={ACCENT}
             strokeWidth={1.5}
             fill={ACCENT}
-            fillOpacity={0.14}
+            fillOpacity={0.12}
             dot={<ConfidenceDot />}
             isAnimationActive={false}
           />

@@ -3,8 +3,9 @@
 // like /login and /auth/callback render without it.
 import type { Metadata } from "next";
 import localFont from "next/font/local";
-import { Newsreader } from "next/font/google";
+import { Fraunces, DM_Mono } from "next/font/google";
 import "./globals.css";
+import { ThemeProvider } from "@/components/theme-provider";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -13,18 +14,22 @@ const geistSans = localFont({
   variable: "--font-geist-sans",
   weight: "100 900",
 });
-const geistMono = localFont({
-  src: "./fonts/GeistMonoVF.woff",
-  variable: "--font-geist-mono",
-  weight: "100 900",
-});
-const newsreader = Newsreader({
+// Fraunces is a variable font — load the full wght range + the optical-size
+// axis (do NOT also pass `weight`, that combination throws at build time).
+const fraunces = Fraunces({
   subsets: ["latin"],
-  weight: ["300", "400", "500", "600"],
   style: ["normal", "italic"],
-  variable: "--font-newsreader",
+  axes: ["opsz"],
+  variable: "--font-fraunces",
   display: "swap",
-  adjustFontFallback: false,
+});
+// DM Mono ships static instances — specify the weights we use.
+const dmMono = DM_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500"],
+  style: ["normal", "italic"],
+  variable: "--font-dm-mono",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
@@ -38,12 +43,19 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable} antialiased`}
+        className={`${geistSans.variable} ${dmMono.variable} ${fraunces.variable} antialiased`}
       >
-        <TooltipProvider>
-          {children}
-          <Toaster richColors position="bottom-right" />
-        </TooltipProvider>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem={false}
+          disableTransitionOnChange
+        >
+          <TooltipProvider>
+            {children}
+            <Toaster richColors position="bottom-right" />
+          </TooltipProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

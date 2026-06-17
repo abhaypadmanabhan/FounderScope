@@ -6,7 +6,7 @@ import type { SectionDefinition, RendererProps } from "./types";
 import { buildSectionPrompt, claimsSchema } from "./shared";
 import { SectionShell } from "@/components/section-shell";
 import { CitationsTrail } from "@/components/citation-sup";
-import { ReplicabilityScore, colorForScore } from "@/components/replicability-score";
+import { ReplicabilityScore } from "@/components/replicability-score";
 import { ReplicabilityRadar, type RadarAxis } from "@/components/replicability-radar";
 import { ConfidenceDot, type ConfidenceVariant } from "@/components/confidence-dot";
 import { padOrder } from "@/lib/sections/format";
@@ -202,7 +202,7 @@ interface AxisRowProps {
 }
 
 function AxisRow({ label, score, confidence, reasoning }: AxisRowProps) {
-  const scoreColor = colorForScore(score);
+  const scoreColor = "var(--accent-color)";
   return (
     <div
       className="grid grid-cols-[110px_56px_1fr] gap-4 items-baseline"

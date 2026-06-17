@@ -1,14 +1,7 @@
-// Giant serif aggregate replicability score with founder-semantics color scale.
-// Low score = easy to rebuild = green (go). High = walk away = red.
+// Giant serif aggregate replicability score. One accent (amber): severity is
+// carried by the mono label + the radar, never by a traffic-light color.
+// Low score = easy to rebuild = "go". High = walk away.
 import React from "react";
-
-const TOKENS = [
-  "var(--rep-green)",
-  "var(--rep-olive)",
-  "var(--rep-amber)",
-  "var(--rep-rust)",
-  "var(--rep-red)",
-] as const;
 
 const LABELS = [
   "easy to rebuild",
@@ -18,13 +11,7 @@ const LABELS = [
   "walk away",
 ] as const;
 
-export function colorForScore(score: number): string {
-  // 1-2 green, 3-4 olive, 5-6 amber, 7-8 rust, 9-10 red
-  const idx = Math.min(4, Math.max(0, Math.floor((score - 1) / 2)));
-  return TOKENS[idx];
-}
-
-export function labelForScore(score: number): string {
+function labelForScore(score: number): string {
   const idx = Math.min(4, Math.max(0, Math.floor((score - 1) / 2)));
   return LABELS[idx];
 }
@@ -35,13 +22,12 @@ interface Props {
 }
 
 export function ReplicabilityScore({ score, moatTypePhrase }: Props) {
-  const color = colorForScore(score);
   const label = labelForScore(score);
   const display = score.toFixed(1);
 
   return (
     <div className="flex flex-col items-start gap-2.5">
-      <div className="flex items-baseline gap-2 num">
+      <div className="flex items-baseline gap-1.5">
         <span
           style={{
             fontFamily: "var(--font-serif)",
@@ -49,27 +35,29 @@ export function ReplicabilityScore({ score, moatTypePhrase }: Props) {
             fontSize: 84,
             lineHeight: 0.95,
             letterSpacing: "-0.03em",
-            color,
+            color: "var(--accent-color)",
+            fontVariantNumeric: "tabular-nums",
           }}
         >
           {display}
         </span>
         <span
+          className="font-mono"
           style={{
-            fontFamily: "var(--font-serif)",
-            fontSize: 22,
+            fontSize: 18,
             color: "var(--text-quiet)",
-            fontWeight: 400,
+            letterSpacing: "-0.02em",
           }}
         >
-          / 10
+          /10
         </span>
       </div>
 
       <span
-        className="micro"
+        className="font-mono"
         style={{
-          color,
+          fontSize: 11,
+          color: "var(--text-soft)",
           textTransform: "uppercase",
           letterSpacing: "0.14em",
           fontWeight: 500,
