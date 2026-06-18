@@ -54,6 +54,33 @@ export function extractJson(text: string): string {
   return s;
 }
 
+/**
+ * Our section/disambiguation schemas are all `z.object(...)`, so the top-level
+ * value MUST be an object. Models occasionally emit a bare quoted string
+ * instead — a refusal, a "no data found" sentence, or their whole answer
+ * wrapped in quotes. `JSON.parse` happily turns that into a JS string, and
+ * `schema.parse(string)` then throws a cryptic "expected object, received
+ * string" that hides what the model actually said. Catch it here and fail with
+ * an actionable model_error that surfaces the model's text.
+ */
+function ensureJsonObject(parsed: unknown, raw: string, logPrefix: string): void {
+  if (parsed !== null && typeof parsed === "object") return;
+
+  const preview =
+    typeof parsed === "string" ? parsed.slice(0, 200) : JSON.stringify(parsed);
+  if (isDev) {
+    console.error(`[${logPrefix}] model returned non-object top-level value`, {
+      type: parsed === null ? "null" : typeof parsed,
+      preview,
+    });
+  }
+  throw new ResearchError(
+    "model_error",
+    `Model returned a ${parsed === null ? "null" : typeof parsed}, not a JSON object: ${preview}`,
+    { raw },
+  );
+}
+
 // ---------------------------------------------------------------------------
 // parseFinal
 // ---------------------------------------------------------------------------
@@ -106,6 +133,8 @@ export function parseFinal<T>(
       cause: err,
     });
   }
+
+  ensureJsonObject(parsed, finalText, logPrefix);
 
   try {
     const data = schema.parse(parsed);
@@ -259,6 +288,8 @@ export function parseFinalOpenAI<T>(
       });
     }
   }
+
+  ensureJsonObject(parsed, content, logPrefix);
 
   try {
     const data = schema.parse(parsed);
