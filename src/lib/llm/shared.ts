@@ -81,6 +81,31 @@ function ensureJsonObject(parsed: unknown, raw: string, logPrefix: string): void
   );
 }
 
+/**
+ * Last-resort recovery for valid JSON of the WRONG shape. Models sometimes wrap
+ * the answer in an array (`[{...}]`) or under a single key (`{"result":{...}}`),
+ * which fails the schema with "expected X, received undefined" on every field.
+ * Try the obvious unwrappings, but accept a candidate ONLY if it actually
+ * satisfies the schema — never guess past validation. Returns null if nothing
+ * salvageable, so the caller surfaces the original schema error.
+ */
+function salvageShape<T>(parsed: unknown, schema: ZodType<T>): { data: T } | null {
+  const candidates: unknown[] = [];
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    candidates.push(parsed[0]);
+  } else if (parsed !== null && typeof parsed === "object") {
+    const values = Object.values(parsed as Record<string, unknown>);
+    if (values.length === 1 && values[0] !== null && typeof values[0] === "object") {
+      candidates.push(values[0]);
+    }
+  }
+  for (const candidate of candidates) {
+    const result = schema.safeParse(candidate);
+    if (result.success) return { data: result.data };
+  }
+  return null;
+}
+
 // ---------------------------------------------------------------------------
 // parseFinal
 // ---------------------------------------------------------------------------
@@ -141,6 +166,11 @@ export function parseFinal<T>(
     return { data, raw: finalText, modelVersion: response.model };
   } catch (err) {
     if (err instanceof ZodError) {
+      const salvaged = salvageShape(parsed, schema);
+      if (salvaged) {
+        if (isDev) console.warn(`[${logPrefix}] salvaged wrapped JSON shape`);
+        return { data: salvaged.data, raw: finalText, modelVersion: response.model };
+      }
       if (isDev) {
         console.error(`[${logPrefix}] schema_validation failure`, {
           model: resolvedModel,
@@ -296,6 +326,11 @@ export function parseFinalOpenAI<T>(
     return { data, raw: content, modelVersion: response.model ?? resolvedModel };
   } catch (err) {
     if (err instanceof ZodError) {
+      const salvaged = salvageShape(parsed, schema);
+      if (salvaged) {
+        if (isDev) console.warn(`[${logPrefix}] salvaged wrapped JSON shape (openai)`);
+        return { data: salvaged.data, raw: content, modelVersion: response.model ?? resolvedModel };
+      }
       if (isDev) {
         console.error(`[${logPrefix}] schema_validation failure (openai)`, {
           model: resolvedModel,

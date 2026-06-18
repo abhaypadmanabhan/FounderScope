@@ -67,12 +67,32 @@ EXAMPLE OUTPUT:
 
 Begin researching now using web_search. When done, output JSON only.`;
 
-  const result = await runResearchCall({
-    config: opts.config,
-    tier: "default",
-    prompt,
-    schema: DisambiguationSchema,
-    cacheKey: "founderscope:disambiguate",
-  });
-  return result.data;
+  // Disambiguation is an optimization, not a hard requirement. If the model
+  // returns unrecoverable JSON (or any other error), fall back to the user's
+  // raw input as the canonical identity rather than aborting the whole research.
+  const fallback: Disambiguation = {
+    canonical_name: opts.name,
+    canonical_domain: opts.domain ?? "",
+    one_line_description: "",
+    disambiguation_note: null,
+  };
+
+  try {
+    const result = await runResearchCall({
+      config: opts.config,
+      tier: "default",
+      prompt,
+      schema: DisambiguationSchema,
+      cacheKey: "founderscope:disambiguate",
+    });
+    return result.data;
+  } catch (err) {
+    if (process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[disambiguate] failed; using raw input as canonical identity:",
+        (err as Error)?.message,
+      );
+    }
+    return fallback;
+  }
 }
