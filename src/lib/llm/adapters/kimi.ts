@@ -5,7 +5,6 @@
 //
 // selectProvider() guarantees exaKey is set when execution reaches here.
 import OpenAI from "openai";
-import { z } from "zod";
 import type { RunArgs, RunResult, ModelTier } from "../types";
 import { EXA_BUDGET } from "../types";
 import { ResearchError } from "../errors";
@@ -82,20 +81,15 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
-  const schemaName = cacheKey?.split(":").pop() || "section";
-  // zod-to-json-schema@3 targets zod v3; this project uses zod v4, which
-  // exposes a native `z.toJSONSchema()`. Output is OpenAPI/JSON-Schema-2020-12
-  // compatible — Moonshot's strict json_schema accepts this shape.
-  const jsonSchema = z.toJSONSchema(schema);
-  const responseFormat = {
-    type: "json_schema" as const,
-    json_schema: {
-      name: schemaName,
-      strict: true,
-      schema: jsonSchema,
-    },
-  };
-
+  // NO response_format. A live probe (2026-06-18) showed kimi-k2.5 serializes
+  // tool calls into message *content* (finish_reason=stop, empty tool_calls)
+  // whenever ANY response_format is set — strict json_schema OR json_object.
+  // Sections always expose the EXA tool, so forcing a response format breaks
+  // the research loop entirely. Instead we convey the schema via the prompt
+  // (buildSectionPrompt embeds it) and validate the reply in parseFinalOpenAI
+  // (JSON.parse → extractJson fallback → Zod). This mirrors the Anthropic path,
+  // which has never used a strict response format either. `schema` stays the
+  // source of truth for validation; it is not sent to the API.
   const tools = [openaiExaToolDef()];
   const messages: Array<Record<string, unknown>> = [
     { role: "user", content: prompt },
@@ -118,7 +112,6 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
         max_tokens: cfg.max_tokens,
         messages,
         tools,
-        response_format: responseFormat,
       };
       if (cfg.temperature !== undefined) params.temperature = cfg.temperature;
       if (cfg.thinking) params.thinking = cfg.thinking;

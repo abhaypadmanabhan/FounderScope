@@ -270,10 +270,12 @@ export interface OpenAIChatCompletionLike {
 }
 
 /**
- * Parse the final assistant message of an OpenAI-compat completion. Strict
- * json_schema mode SHOULD make `JSON.parse(content)` succeed; we still run
- * `extractJson` as a guard, then validate with Zod (matches `parseFinal`'s
- * contract for the Anthropic path).
+ * Parse the final assistant message of an OpenAI-compat completion. The Kimi
+ * adapter sends NO response_format (it breaks Kimi's tool channel), so the
+ * model emits free-form text that should be JSON per the prompt: we try
+ * `JSON.parse(content)` first, fall back to `extractJson` for fenced/prose
+ * output, then validate with Zod (matches `parseFinal`'s contract for the
+ * Anthropic path).
  */
 export function parseFinalOpenAI<T>(
   response: OpenAIChatCompletionLike,
@@ -292,21 +294,20 @@ export function parseFinalOpenAI<T>(
     throw new ResearchError("model_error", "no content in final response", {});
   }
 
-  // Strict json_schema mode SHOULD make this branch take the fast path.
+  // Clean JSON output takes this fast path; fenced/prose output hits the catch.
   let parsed: unknown;
   try {
     parsed = JSON.parse(content);
   } catch {
-    // Defensive fallback: model accidentally fenced or prose-prefixed the
-    // output despite strict mode. Reuse extractJson for one retry before
-    // we surface a schema_validation failure.
+    // Model fenced or prose-prefixed its JSON. Reuse extractJson for one retry
+    // before we surface a schema_validation failure.
     const cleaned = extractJson(content);
     try {
       parsed = JSON.parse(cleaned);
     } catch (err) {
       if (isDev) {
         console.error(
-          `[${logPrefix}] JSON parse failed (strict mode) for model`,
+          `[${logPrefix}] JSON parse failed for model`,
           resolvedModel,
           "text length",
           content.length,

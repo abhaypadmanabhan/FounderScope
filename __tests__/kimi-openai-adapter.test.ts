@@ -241,28 +241,24 @@ describe("Kimi adapter — strict json_schema + cache key", () => {
     expect(p.prompt_cache_key).toBe("founderscope:section:snapshot");
   });
 
-  it("emits response_format json_schema strict from the Zod schema", async () => {
+  it("omits response_format entirely so Kimi uses the native tool_calls channel", async () => {
+    // Live probe (2026-06-18) proved kimi-k2.5 serializes tool calls into message
+    // content (finish_reason=stop) whenever ANY response_format is set — strict
+    // json_schema OR json_object. Sections require EXA tool use, so we must NOT
+    // send response_format; the schema is conveyed via the prompt and the reply
+    // is validated by parseFinalOpenAI (extractJson + Zod). Matches the Anthropic path.
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi(makeArgs("default"));
     const p = sdkCalls[0].params as Record<string, unknown>;
-    const rf = p.response_format as {
-      type: string;
-      json_schema: { name: string; strict: boolean; schema: { type: string } };
-    };
-    expect(rf.type).toBe("json_schema");
-    expect(rf.json_schema.strict).toBe(true);
-    expect(rf.json_schema.name).toBe("snapshot");
-    expect(rf.json_schema.schema.type).toBe("object");
+    expect(p.response_format).toBeUndefined();
   });
 
-  it("falls back json_schema name to 'section' when cacheKey is missing", async () => {
+  it("omits prompt_cache_key when cacheKey is missing", async () => {
     const { runKimi } = await import("@/lib/llm/adapters/kimi");
     chatResponseSequence = [stopResponse("kimi-k2.5")];
     await runKimi({ ...makeArgs("default"), cacheKey: undefined });
     const p = sdkCalls[0].params as Record<string, unknown>;
-    const rf = p.response_format as { json_schema: { name: string } };
-    expect(rf.json_schema.name).toBe("section");
     expect(p.prompt_cache_key).toBeUndefined();
   });
 
