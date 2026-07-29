@@ -64,6 +64,20 @@ const okResult = {
   response: { modelId: "m" },
 };
 
+// With tools registered the answer now comes from the model's TEXT, not from
+// Output.object — a forced response format suppresses tool calls entirely.
+// A fake result therefore has to carry the object in `text` like a real one.
+function resultFor(object: unknown) {
+  const text = JSON.stringify(object);
+  return {
+    output: object,
+    text,
+    steps: [{ text }],
+    finishReason: "stop",
+    response: { modelId: "m" },
+  };
+}
+
 const originalFetch = global.fetch;
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -326,10 +340,8 @@ describe("an empty section is a failure, not a success", () => {
   });
 
   it("rejects a schema-valid object with zero claims", async () => {
-    generateTextImpl = async () => ({
-      ...okResult,
-      output: { summary: "Nothing found.", claims: [] },
-    });
+    generateTextImpl = async () =>
+      resultFor({ summary: "Nothing found.", claims: [] });
 
     const err = await runResearchCall({
       config,
@@ -369,13 +381,11 @@ describe("an empty section is a failure, not a success", () => {
   });
 
   it("accepts a section with at least one claim", async () => {
-    generateTextImpl = async () => ({
-      ...okResult,
-      output: {
+    generateTextImpl = async () =>
+      resultFor({
         summary: "Found something.",
         claims: [{ id: 1, text: "Linear was founded in 2019." }],
-      },
-    });
+      });
 
     const result = await runResearchCall({
       config,
@@ -391,10 +401,7 @@ describe("an empty section is a failure, not a success", () => {
 
   it("leaves claim-less output shapes alone — disambiguation has no claims", async () => {
     const disambigSchema = z.object({ canonical_name: z.string() });
-    generateTextImpl = async () => ({
-      ...okResult,
-      output: { canonical_name: "Linear" },
-    });
+    generateTextImpl = async () => resultFor({ canonical_name: "Linear" });
 
     const result = await runResearchCall({
       config,
