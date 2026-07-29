@@ -61,6 +61,16 @@ function toolFrom(params: Record<string, unknown>): ToolExecute {
   return tools.web_search.execute;
 }
 
+// With tools registered the answer comes from the model's TEXT, not from
+// Output.object: a forced response format suppresses tool calls.
+const OK_RESULT = {
+  output: { summary: "ok" },
+  text: '{"summary":"ok"}',
+  steps: [{ text: '{"summary":"ok"}' }],
+  finishReason: "stop",
+  response: { modelId: "m" },
+};
+
 beforeEach(() => {
   generateTextCalls.length = 0;
   generateTextImpl = async () => ({
@@ -82,11 +92,7 @@ describe("search tool output shape", () => {
     let toolOutput = "";
     generateTextImpl = async (params) => {
       toolOutput = await toolFrom(params)({ query: "stripe funding" });
-      return {
-        output: { summary: "ok" },
-        text: "{}",
-        response: { modelId: "m" },
-      };
+      return OK_RESULT;
     };
 
     await runResearchCall({ config, tier: "default", prompt: "p", schema });
@@ -105,7 +111,7 @@ describe("search tool output shape", () => {
     let toolOutput = "";
     generateTextImpl = async (params) => {
       toolOutput = await toolFrom(params)({ query: "q", num_results: 3 });
-      return { output: { summary: "ok" }, text: "{}", response: { modelId: "m" } };
+      return OK_RESULT;
     };
 
     await runResearchCall({ config, tier: "default", prompt: "p", schema });
@@ -126,7 +132,7 @@ describe("budget exhaustion reaches the model", () => {
       // Must not reject: an exception here would kill the section and discard
       // every search the model had already banked.
       toolOutput = await toolFrom(params)({ query: "q" });
-      return { output: { summary: "ok" }, text: "{}", response: { modelId: "m" } };
+      return OK_RESULT;
     };
 
     const result = await runResearchCall({
@@ -155,7 +161,7 @@ describe("budget exhaustion reaches the model", () => {
     let toolOutput = "";
     generateTextImpl = async (params) => {
       toolOutput = await toolFrom(params)({ query: "q" });
-      return { output: { summary: "ok" }, text: "{}", response: { modelId: "m" } };
+      return OK_RESULT;
     };
 
     await runResearchCall({ config, tier: "default", prompt: "p", schema });
@@ -174,7 +180,7 @@ describe("budget exhaustion reaches the model", () => {
     };
     generateTextImpl = async (params) => {
       await toolFrom(params)({ query: "q" });
-      return { output: { summary: "ok" }, text: "{}", response: { modelId: "m" } };
+      return OK_RESULT;
     };
 
     await runResearchCall({ config, tier: "reasoning", prompt: "p", schema });

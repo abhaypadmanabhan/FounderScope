@@ -140,7 +140,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
 
   const openrouter = createOpenRouter({ apiKey: config.openrouterKey });
   const stepBudget = stepBudgetFor(tier);
-  const trace: ToolTrace = { attempts: 0, failures: 0, lastError: null };
+  const trace: ToolTrace = { attempts: 0, failures: 0, errors: [] };
 
   try {
     const result = await generateText({
@@ -167,8 +167,23 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
             },
           }
         : {}),
-      // Structured output alongside tools: generateObject cannot do this.
-      output: Output.object({ schema }),
+      // Output.object ONLY when no tools are offered.
+      //
+      // It sets responseFormat to a strict json_schema, and the SDK attaches
+      // that to EVERY step of the loop (ai/dist/index.mjs:4738), including the
+      // step where tools are offered. A model under a strict response format
+      // has one legal move — emit an object matching the schema — so it cannot
+      // emit a tool call. gemini-3.1-flash-lite complies immediately and
+      // returns a schema-valid object with empty arrays, which is what six
+      // default-tier sections did on the fifth live run: no error, no timeout,
+      // no step exhaustion, no searches, nothing in `claims`.
+      //
+      // With tools we let the model talk, and parse its JSON from the text.
+      // That is what every section prompt was written for — they all carry a
+      // "JSON SCHEMA:" block, an "EXAMPLE OUTPUT" block, and "Output ONE valid
+      // JSON object ... No prose. No markdown. No code fences." — and
+      // parseModelJson already recovers fenced and wrapped variants.
+      ...(withTools ? {} : { output: Output.object({ schema }) }),
       stopWhen: stepCountIs(withTools ? stepBudget : 2),
       maxOutputTokens: maxOutputTokensFor(tier),
       // Per-step and overall, never one flat abort around the whole loop.
@@ -186,8 +201,11 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
     });
 
     const text = collectStepText(result);
+    const data = withTools
+      ? parseToolLoopOutput(result, text, schema, stepBudget, trace)
+      : readOutput(result, text, schema, stepBudget, trace);
     return {
-      data: assertPopulated(readOutput(result, text, schema, stepBudget, trace)),
+      data: assertPopulated(data),
       raw: text,
       modelVersion: result.response?.modelId ?? modelId,
       usage,
@@ -299,11 +317,24 @@ function noOutputError(
   );
 }
 
-/** Per-call record of how the search tool actually behaved. */
+/**
+ * Per-call record of how the search tool actually behaved.
+ *
+ * `errors` keeps every DISTINCT failure in the order first seen. Reporting only
+ * the last one is what let an EXA 401 on every single call read as "budget
+ * exhausted" — the final failure was the budget guard, and the 401 that caused
+ * all of them had been overwritten eight times. The first error is the cause;
+ * the last is usually a consequence.
+ */
 interface ToolTrace {
   attempts: number;
   failures: number;
-  lastError: string | null;
+  errors: string[];
+}
+
+function recordFailure(trace: ToolTrace, message: string): void {
+  trace.failures++;
+  if (!trace.errors.includes(message)) trace.errors.push(message);
 }
 
 function describeTrace(trace: ToolTrace): string {
@@ -311,10 +342,38 @@ function describeTrace(trace: ToolTrace): string {
   if (trace.failures === 0) {
     return `web_search ran ${trace.attempts} time(s), all successful.`;
   }
+  const first = trace.errors[0] ?? "unknown";
+  const rest = trace.errors.slice(1);
   return (
     `web_search ran ${trace.attempts} time(s), ${trace.failures} failed. ` +
-    `Last search error: ${trace.lastError ?? "unknown"}.`
+    `First search error: ${first}.` +
+    (rest.length > 0 ? ` Also seen: ${rest.join("; ")}.` : "")
   );
+}
+
+/**
+ * The tool-loop path's answer: the model's own text, parsed and validated.
+ * `parseModelJson` strips fences, unwraps a single-key or array wrapper, and
+ * raises a ResearchError describing what the model actually did — the same
+ * recovery the hand-rolled adapters had, and the reason dropping Output.object
+ * here costs nothing.
+ */
+function parseToolLoopOutput<T>(
+  result: ResultLike,
+  text: string,
+  schema: RunArgs<T>["schema"],
+  stepBudget: number,
+  trace: ToolTrace,
+): T {
+  if (text.trim().length === 0) {
+    throw noOutputError(
+      result.steps?.length ?? 0,
+      stepBudget,
+      result.finishReason,
+      trace,
+    );
+  }
+  return parseModelJson(text, schema, "openrouter");
 }
 
 function readOutput<T>(
@@ -365,8 +424,7 @@ async function runSearchTool(
   trace.attempts++;
   const trimmedQuery = query.trim();
   if (trimmedQuery.length === 0) {
-    trace.failures++;
-    trace.lastError = "empty query";
+    recordFailure(trace, "empty query");
     return JSON.stringify({
       error: "empty query",
       message: "Call web_search again with a non-empty query string.",
@@ -384,8 +442,7 @@ async function runSearchTool(
     // A bare array is a different contract.
     return JSON.stringify({ results });
   } catch (err) {
-    trace.failures++;
-    trace.lastError = (err as Error)?.message ?? String(err);
+    recordFailure(trace, (err as Error)?.message ?? String(err));
     if (err instanceof SearchBudgetExhaustedError) {
       return JSON.stringify({
         error: err.message,
