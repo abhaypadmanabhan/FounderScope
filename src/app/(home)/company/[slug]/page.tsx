@@ -219,8 +219,8 @@ export default function CompanyPage({ params }: PageProps) {
           {phase === "loading" && "Loading…"}
           {phase === "needs_key" && (
             errorMsg === "missing_search_key"
-              ? "EXA key required for Kimi search"
-              : "Anthropic API key required for fresh research"
+              ? "Search key required for fresh research"
+              : "OpenRouter API key required for fresh research"
           )}
           {phase === "error" && (errorMsg ?? "Error")}
         </div>
@@ -246,12 +246,12 @@ export default function CompanyPage({ params }: PageProps) {
           >
             {errorMsg === "missing_search_key" ? (
               <>
-                Kimi requires an EXA key for web search. Add an EXA key in{" "}
+                Research needs a web-search key for grounding. Add one in{" "}
                 <Link className="underline font-medium" href="/settings">/settings</Link>.
               </>
             ) : (
               <>
-                Set your Anthropic or Kimi API key in{" "}
+                Set your OpenRouter API key in{" "}
                 <Link className="underline font-medium" href="/settings">
                   /settings
                 </Link>{" "}

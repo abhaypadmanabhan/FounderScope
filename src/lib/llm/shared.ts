@@ -183,6 +183,11 @@ export async function withRetry<T>(
       lastErr = err;
       if (!(err instanceof ResearchError)) throw err;
       if (err.category !== "rate_limit" && err.category !== "timeout") throw err;
+      // An attempt is now the ENTIRE tool loop, not one 60s API turn, so a
+      // retry re-pays for a full search budget and a full token spend. Errors
+      // that opt out (a total-loop timeout, which already failed to converge)
+      // are not worth that money.
+      if (err.retryable === false) throw err;
       if (attempt === delays.length) throw err;
       await new Promise((r) => setTimeout(r, delays[attempt]));
     }

@@ -143,13 +143,15 @@ describe("budget exhaustion reaches the model", () => {
     });
 
     expect(JSON.parse(toolOutput)).toEqual({
-      error: "exa_search budget exhausted",
-      message: SEARCH_BUDGET_EXHAUSTED_INSTRUCTION,
+      error: "web_search budget exhausted",
+      message: `${SEARCH_BUDGET_EXHAUSTED_INSTRUCTION} Do not call web_search again.`,
       results: [],
     });
+    // The search layer must NOT name the tool — the LLM layer appends it.
     expect(SEARCH_BUDGET_EXHAUSTED_INSTRUCTION).toBe(
-      "Write your final JSON answer now using prior search results. Do not call exa_search again.",
+      "Write your final JSON answer now using prior search results.",
     );
+    expect(SEARCH_BUDGET_EXHAUSTED_INSTRUCTION).not.toContain("exa_search");
     expect(result.data).toEqual({ summary: "ok" });
   });
 

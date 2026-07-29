@@ -483,9 +483,13 @@ async function runSearchTool(
   } catch (err) {
     recordFailure(trace, (err as Error)?.message ?? String(err));
     if (err instanceof SearchBudgetExhaustedError) {
+      // The model-facing text is composed here, not in the search layer: this
+      // module owns SEARCH_TOOL_NAME, and the search layer has no idea what the
+      // tool is called. Naming it there is how a rename left the model being
+      // told to stop calling a tool that no longer existed.
       return JSON.stringify({
-        error: err.message,
-        message: err.instruction,
+        error: `${SEARCH_TOOL_NAME} budget exhausted`,
+        message: `${err.instruction} Do not call ${SEARCH_TOOL_NAME} again.`,
         results: [],
       });
     }
@@ -520,12 +524,16 @@ function mapSdkError(err: unknown, modelId: string): ResearchError {
     // 60000ms exceeded" vs "Total timeout of ..."), which is the difference
     // between one slow round trip and a loop that never converged.
     const detail = (err as Error)?.message ?? "";
+    // A total timeout means the loop never converged; repeating it costs a
+    // second full search budget and token spend to most likely fail the same
+    // way. A step timeout is one slow round trip and is worth another go.
+    const isTotalTimeout = detail.includes("Total timeout");
     return new ResearchError(
       "timeout",
       detail
         ? `OpenRouter call aborted: ${detail}`
         : `OpenRouter call aborted before finishing`,
-      { cause: err },
+      { cause: err, retryable: isTotalTimeout ? false : undefined },
     );
   }
 

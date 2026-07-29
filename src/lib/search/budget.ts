@@ -1,7 +1,11 @@
 import type { SearchBudget, SearchProvider, SearchUsage } from "./types";
 
+// Deliberately does NOT name the search tool. The search layer does not own the
+// tool name — the LLM layer does (SEARCH_TOOL_NAME) and appends it. A copy of the
+// name here is what left the model being told to stop calling `exa_search` after
+// the tool was renamed to `web_search`.
 export const SEARCH_BUDGET_EXHAUSTED_INSTRUCTION =
-  "Write your final JSON answer now using prior search results. Do not call exa_search again.";
+  "Write your final JSON answer now using prior search results.";
 
 export const SEARCH_BUDGET: Readonly<Record<SearchBudget["tier"], number>> = {
   default: 8,
@@ -29,7 +33,7 @@ export class SearchBudgetExhaustedError extends Error {
   readonly instruction = SEARCH_BUDGET_EXHAUSTED_INSTRUCTION;
 
   constructor(readonly providerId: SearchProvider["id"]) {
-    super("exa_search budget exhausted");
+    super(`${providerId} search budget exhausted`);
     this.name = "SearchBudgetExhaustedError";
   }
 }

@@ -10,17 +10,6 @@ export interface WithExaRetryOptions {
   delays?: number[];
 }
 
-export async function withExaRetry<T>(
-  operation: () => Promise<T>,
-  opts: WithExaRetryOptions = {},
-): Promise<T> {
-  return withRetryMatching(operation, "EXA 429", opts);
-}
-
-export function isExaRateLimitError(error: unknown): boolean {
-  return isSearchRateLimitError("exa", error);
-}
-
 export async function withSearchRetry<T>(
   providerId: "exa" | "firecrawl" | "tavily",
   operation: () => Promise<T>,

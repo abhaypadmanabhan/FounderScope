@@ -15,9 +15,7 @@ export {
   sourceFallback,
 } from "./source-fallback";
 export {
-  isExaRateLimitError,
   isSearchRateLimitError,
-  withExaRetry,
   withSearchRetry,
 } from "./with-exa-retry";
 export type {

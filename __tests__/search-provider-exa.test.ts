@@ -29,7 +29,7 @@ import {
   createSearchProvider,
   createSearchUsage,
   sourceFallback,
-  withExaRetry,
+  withSearchRetry,
 } from "@/lib/search";
 
 const originalFetch = global.fetch;
@@ -198,7 +198,7 @@ describe("EXA retry", () => {
     });
 
     await expect(
-      withExaRetry(operation, {
+      withSearchRetry("exa", operation, {
         sleep: async () => undefined,
         delays: [0, 0, 0],
       }),
@@ -229,7 +229,7 @@ describe("search budget", () => {
     }
 
     await expect(provider.search("overflow", { budget })).rejects.toThrow(
-      /exa_search budget exhausted/,
+      /exa search budget exhausted/,
     );
     await expect(provider.search("overflow", { budget })).rejects.toMatchObject({
       name: "SearchBudgetExhaustedError",
@@ -241,7 +241,7 @@ describe("search budget", () => {
     } catch (error) {
       expect(error).toBeInstanceOf(SearchBudgetExhaustedError);
       expect((error as SearchBudgetExhaustedError).instruction).toBe(
-        "Write your final JSON answer now using prior search results. Do not call exa_search again.",
+        "Write your final JSON answer now using prior search results.",
       );
     }
     expect(fetchMock).toHaveBeenCalledTimes(SEARCH_BUDGET.default);

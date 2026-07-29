@@ -114,7 +114,7 @@ export default function HomePage() {
       >
         <span>Open source · MIT</span>
         <span>·</span>
-        <span>Bring your own Anthropic API key</span>
+        <span>Bring your own OpenRouter API key</span>
         <span>·</span>
         <span>Cache shared across all users</span>
       </div>

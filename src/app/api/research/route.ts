@@ -148,7 +148,9 @@ export async function POST(request: Request) {
           disambiguation_note: disambig.disambiguation_note,
         });
 
-        await updateCompanyCanonical(
+        // Not awaited: neither write feeds companyInput, and awaiting them put
+        // two Supabase round trips of dead time in front of 7 LLM calls.
+        void updateCompanyCanonical(
           company.id,
           disambig.canonical_name,
           disambig.canonical_domain
@@ -160,7 +162,7 @@ export async function POST(request: Request) {
         // RLS (we don't have an UPDATE policy on search_history, so the
         // upsert's conflict path would otherwise fail).
         if (userId) {
-          await supabaseAdmin
+          void supabaseAdmin
             .from("search_history")
             .upsert(
               {
