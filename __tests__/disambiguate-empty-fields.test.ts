@@ -158,6 +158,68 @@ describe("disambiguateCompany", () => {
     expect(out.one_line_description).toBe("Issue tracking for software teams.");
   });
 
+  // Why the empty-field symptom is ambiguous from outside: for a single-word
+  // company with no domain hint, the fallback object and a fully-blank model
+  // answer normalise to byte-identical output. Only the logs tell them apart,
+  // which is why both paths now log.
+  it("produces identical output whether the model failed or answered blank", async () => {
+    runImpl = async () => {
+      throw new Error("boom");
+    };
+    const fromFailure = await disambiguateCompany({
+      config,
+      name: "Linear",
+      domain: null,
+    });
+
+    runImpl = async () => ({
+      data: {
+        canonical_name: "",
+        canonical_domain: "",
+        one_line_description: "",
+        disambiguation_note: null,
+      },
+    });
+    const fromBlankAnswer = await disambiguateCompany({
+      config,
+      name: "Linear",
+      domain: null,
+    });
+
+    expect(fromFailure).toEqual(fromBlankAnswer);
+    expect(fromFailure).toEqual({
+      canonical_name: "Linear",
+      canonical_domain: "",
+      one_line_description: "",
+      disambiguation_note: null,
+    });
+    // Distinguishable only here.
+    expect(error).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("passes a real model answer straight through once search works", async () => {
+    runImpl = async () => ({
+      data: {
+        canonical_name: "Linear Orbit, Inc.",
+        canonical_domain: "linear.app",
+        one_line_description: "Issue tracking and project planning for software teams.",
+        disambiguation_note: null,
+      },
+    });
+
+    const out = await disambiguateCompany({
+      config,
+      name: "Linear",
+      domain: null,
+    });
+
+    expect(out.canonical_domain).toBe("linear.app");
+    expect(out.one_line_description).not.toBe("");
+    expect(error).not.toHaveBeenCalled();
+    expect(warn).not.toHaveBeenCalled();
+  });
+
   it("falls back to raw input on failure and logs it at error level, not dev-only", async () => {
     runImpl = async () => {
       throw new Error("Step timeout of 60000ms exceeded");

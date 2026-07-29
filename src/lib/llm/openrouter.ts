@@ -73,8 +73,30 @@ const SEARCH_TOOL_DESCRIPTION =
   "Search the public web. Returns a list of {title, url, highlights} hits. " +
   "Use for company facts, founder bios, funding rounds, news. " +
   "When you cite a fact in your output's `claims`, use the URL from these results. " +
+  "num_results is optional: how many hits to return, 1-10, default 5. " +
   "Budget: aim for 3-5 searches per task. Quality matters more than quantity. " +
   "After gathering enough information, stop searching and write the final JSON answer.";
+
+/**
+ * Deliberately forgiving, because a tool call that fails *validation* never
+ * reaches `execute` — the SDK hands the model an opaque error and the model
+ * spends a step retrying. The callback's try/catch cannot save it; the only
+ * defence is a schema that accepts what models actually emit.
+ *
+ * A model sending `num_results: "3"` (a JSON string, common when tool
+ * arguments are serialised) was rejected outright by the previous
+ * `z.number().int().min(1).max(10)`. Now anything unusable degrades to
+ * `undefined` and the callback falls back to the default, and out-of-range
+ * values are clamped in `runSearchTool` rather than refused. The advertised
+ * range moved into the description, where it guides without gating.
+ */
+export const SEARCH_TOOL_INPUT_SCHEMA = z.object({
+  query: z.coerce.string(),
+  num_results: z.coerce.number().int().optional().catch(undefined),
+});
+
+const MIN_RESULTS = 1;
+const MAX_RESULTS = 10;
 
 /**
  * Steps the SDK is allowed before it gives up.
@@ -113,10 +135,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       tools: {
         [SEARCH_TOOL_NAME]: tool({
           description: SEARCH_TOOL_DESCRIPTION,
-          inputSchema: z.object({
-            query: z.string(),
-            num_results: z.number().int().min(1).max(10).optional(),
-          }),
+          inputSchema: SEARCH_TOOL_INPUT_SCHEMA,
           execute: async ({ query, num_results }) =>
             runSearchTool(searchProvider, query, num_results, budget, usage),
         }),
@@ -242,9 +261,18 @@ async function runSearchTool(
   budget: ReturnType<typeof createSearchBudget>,
   usage: SearchUsage,
 ): Promise<string> {
+  const trimmedQuery = query.trim();
+  if (trimmedQuery.length === 0) {
+    return JSON.stringify({
+      error: "empty query",
+      message: "Call web_search again with a non-empty query string.",
+      results: [],
+    });
+  }
+
   try {
-    const results = await provider.search(query, {
-      numResults,
+    const results = await provider.search(trimmedQuery, {
+      numResults: clampResults(numResults),
       budget,
       usage,
     });
@@ -259,11 +287,26 @@ async function runSearchTool(
         results: [],
       });
     }
+    // Anything else — a provider outage, a misconfigured policy, a TypeError
+    // from a future refactor — becomes a readable blob rather than an opaque
+    // rejection. On the second live run every section that failed did so by
+    // burning its whole step budget retrying failed tool calls, so this branch
+    // is the difference between one wasted step and all of them.
+    if (isDev) {
+      console.error("[openrouter] web_search failed", err);
+    }
     return JSON.stringify({
       error: (err as Error)?.message ?? "search call failed",
       results: [],
     });
   }
+}
+
+// Out-of-range is the model guessing, not the model failing. Clamp rather than
+// refuse: a rejected call costs a step and returns nothing.
+function clampResults(value: number | undefined): number | undefined {
+  if (value === undefined || !Number.isFinite(value)) return undefined;
+  return Math.min(MAX_RESULTS, Math.max(MIN_RESULTS, Math.round(value)));
 }
 
 function mapSdkError(err: unknown, modelId: string): ResearchError {

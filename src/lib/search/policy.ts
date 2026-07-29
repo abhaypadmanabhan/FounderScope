@@ -21,6 +21,23 @@ import type {
   SearchResult,
 } from "./types";
 
+/**
+ * A caller reached the policy wrapper without the budget `SearchOptions`
+ * requires. That is a wiring mistake, not a search failure, and it used to
+ * surface as `TypeError: Cannot read properties of undefined (reading 'used')`
+ * from inside `consumeSearchBudget` — an unattributable message thrown deep in
+ * a tool callback, where the model's only response is to retry until its step
+ * budget is gone.
+ */
+export class SearchMisconfiguredError extends Error {
+  readonly code = "search_misconfigured";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "SearchMisconfiguredError";
+  }
+}
+
 export function withSearchPolicy(
   backend: RawSearchProvider,
 ): SearchProvider {
@@ -30,6 +47,16 @@ export function withSearchPolicy(
       query: string,
       opts: SearchOptions,
     ): Promise<SearchResult[]> {
+      // `SearchOptions.budget` is required, so this cannot happen through a
+      // typechecked call site. It guards the untyped ones — a JS caller, a
+      // hand-built options object, a test harness — and names itself when it
+      // does, instead of dying on a property read three frames down.
+      if (opts?.budget == null) {
+        throw new SearchMisconfiguredError(
+          `${backend.id} search called without a SearchBudget. ` +
+            "Create one per model call with createSearchBudget(tier) and pass it in SearchOptions.",
+        );
+      }
       consumeSearchBudget(backend.id, opts.budget);
       const primary = toSearchRequest(query, opts);
       const primaryKey = cacheKeyFor(primary, backend.id);
