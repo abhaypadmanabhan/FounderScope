@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { supabaseAdmin as supabase } from "../supabase/admin";
 import type { SearchRequest } from "./request";
-import type { SearchResult } from "./types";
+import type { SearchProvider, SearchResult } from "./types";
 
 const DEFAULT_TTL_DAYS = 7;
 const FNV_OFFSET = BigInt("0xcbf29ce484222325");
@@ -32,8 +32,11 @@ function fnv1a64Hex(value: string): string {
   return hash.toString(16).padStart(16, "0");
 }
 
-export function cacheKeyFor(input: SearchRequest): string {
-  const parts = {
+export function cacheKeyFor(
+  input: SearchRequest,
+  providerId: SearchProvider["id"] = "exa",
+): string {
+  const legacyParts = {
     q: (input.query ?? "").trim().toLowerCase(),
     n: input.numResults ?? 5,
     inc: [...(input.includeDomains ?? [])]
@@ -45,6 +48,10 @@ export function cacheKeyFor(input: SearchRequest): string {
     spd: input.startPublishedDate ?? null,
     lc: input.livecrawl ?? null,
   };
+  const parts =
+    providerId === "exa"
+      ? legacyParts
+      : { ...legacyParts, provider: providerId };
   return fnv1a64Hex(JSON.stringify(parts));
 }
 

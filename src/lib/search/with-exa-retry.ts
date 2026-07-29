@@ -1,7 +1,5 @@
 const BASE_DELAYS_MS = [1_000, 4_000, 12_000];
 const JITTER = 0.25;
-const RETRYABLE_RE = /^EXA 429/;
-
 function delayWithJitter(base: number): number {
   const jitter = base * JITTER;
   return Math.max(0, base + (Math.random() * 2 - 1) * jitter);
@@ -16,6 +14,35 @@ export async function withExaRetry<T>(
   operation: () => Promise<T>,
   opts: WithExaRetryOptions = {},
 ): Promise<T> {
+  return withRetryMatching(operation, "EXA 429", opts);
+}
+
+export function isExaRateLimitError(error: unknown): boolean {
+  return isSearchRateLimitError("exa", error);
+}
+
+export async function withSearchRetry<T>(
+  providerId: "exa" | "firecrawl" | "tavily",
+  operation: () => Promise<T>,
+  opts: WithExaRetryOptions = {},
+): Promise<T> {
+  const prefix = `${providerId.toUpperCase()} 429`;
+  return withRetryMatching(operation, prefix, opts);
+}
+
+export function isSearchRateLimitError(
+  providerId: "exa" | "firecrawl" | "tavily",
+  error: unknown,
+): boolean {
+  const message = (error as Error)?.message ?? "";
+  return message.startsWith(`${providerId.toUpperCase()} 429`);
+}
+
+async function withRetryMatching<T>(
+  operation: () => Promise<T>,
+  retryablePrefix: string,
+  opts: WithExaRetryOptions,
+): Promise<T> {
   const delays = opts.delays ?? BASE_DELAYS_MS;
   const sleep =
     opts.sleep ??
@@ -28,15 +55,10 @@ export async function withExaRetry<T>(
     } catch (error) {
       lastError = error;
       const message = (error as Error)?.message ?? "";
-      if (!RETRYABLE_RE.test(message)) throw error;
+      if (!message.startsWith(retryablePrefix)) throw error;
       if (attempt === delays.length) throw error;
       await sleep(delayWithJitter(delays[attempt]));
     }
   }
   throw lastError;
-}
-
-export function isExaRateLimitError(error: unknown): boolean {
-  const message = (error as Error)?.message ?? "";
-  return /^EXA 429/.test(message);
 }

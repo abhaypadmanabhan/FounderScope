@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { responseError } from "./http";
-import type { SearchOptions, SearchProvider, SearchResult } from "./types";
+import type { RawSearchProvider, SearchResult } from "./types";
 
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v2/search";
 
@@ -21,19 +21,19 @@ const firecrawlResponseSchema = z.object({
     .optional(),
 });
 
-export function createFirecrawlProvider(apiKey: string): SearchProvider {
+export function createFirecrawlProvider(apiKey: string): RawSearchProvider {
   return {
     id: "firecrawl",
-    async search(query: string, opts: SearchOptions): Promise<SearchResult[]> {
+    async search(query, request): Promise<SearchResult[]> {
       const body: Record<string, unknown> = {
         query,
-        limit: opts.numResults ?? 5,
+        limit: request.numResults ?? 5,
       };
-      if (opts.includeDomains && opts.includeDomains.length > 0) {
-        body.includeDomains = opts.includeDomains;
+      if (request.includeDomains && request.includeDomains.length > 0) {
+        body.includeDomains = request.includeDomains;
       }
-      if (opts.excludeDomains && opts.excludeDomains.length > 0) {
-        body.excludeDomains = opts.excludeDomains;
+      if (request.excludeDomains && request.excludeDomains.length > 0) {
+        body.excludeDomains = request.excludeDomains;
       }
 
       const response = await fetch(FIRECRAWL_ENDPOINT, {

@@ -22,7 +22,9 @@ vi.mock("@/lib/search/cache", () => ({
 }));
 
 import {
+  SEARCH_BUDGET_EXHAUSTED_INSTRUCTION,
   SEARCH_BUDGET,
+  SearchBudgetExhaustedError,
   createSearchBudget,
   createSearchProvider,
   createSearchUsage,
@@ -69,7 +71,7 @@ describe("EXA provider cache", () => {
 
     const results = await createSearchProvider("exa", "exa-test").search(
       "acme",
-      { usage },
+      { usage, budget: createSearchBudget("default") },
     );
 
     expect(results).toEqual([
@@ -101,7 +103,7 @@ describe("EXA provider cache", () => {
 
     const results = await createSearchProvider("exa", "exa-test").search(
       "acme",
-      { numResults: 3, usage },
+      { numResults: 3, usage, budget: createSearchBudget("default") },
     );
 
     expect(results).toHaveLength(3);
@@ -144,7 +146,7 @@ describe("EXA provider source fallback", () => {
 
     const results = await createSearchProvider("exa", "exa-test").search(
       "stealth startup",
-      { usage },
+      { usage, budget: createSearchBudget("default") },
     );
 
     expect(results.map((result) => result.url)).toEqual([
@@ -229,8 +231,86 @@ describe("search budget", () => {
     await expect(provider.search("overflow", { budget })).rejects.toThrow(
       /exa_search budget exhausted/,
     );
+    await expect(provider.search("overflow", { budget })).rejects.toMatchObject({
+      name: "SearchBudgetExhaustedError",
+      instruction: SEARCH_BUDGET_EXHAUSTED_INSTRUCTION,
+      providerId: "exa",
+    });
+    try {
+      await provider.search("overflow", { budget });
+    } catch (error) {
+      expect(error).toBeInstanceOf(SearchBudgetExhaustedError);
+      expect((error as SearchBudgetExhaustedError).instruction).toBe(
+        "Write your final JSON answer now using prior search results. Do not call exa_search again.",
+      );
+    }
     expect(fetchMock).toHaveBeenCalledTimes(SEARCH_BUDGET.default);
     expect(readCacheMock).toHaveBeenCalledTimes(SEARCH_BUDGET.default);
     expect(budget.used).toBe(SEARCH_BUDGET.default);
   });
 });
+
+describe("EXA tolerant response mapping", () => {
+  it("degrades null and mistyped fields exactly like the legacy mapper", async () => {
+    const payloads = [
+      { body: { results: null }, expected: [] },
+      {
+        body: {
+          results: [
+            {
+              title: null,
+              url: "https://title-null.example",
+              highlights: ["title"],
+            },
+          ],
+        },
+        expected: [
+          {
+            title: "",
+            url: "https://title-null.example",
+            highlights: ["title"],
+          },
+        ],
+      },
+      {
+        body: {
+          results: [
+            {
+              title: "Highlights null",
+              url: "https://highlights-null.example",
+              highlights: null,
+            },
+          ],
+        },
+        expected: [
+          {
+            title: "Highlights null",
+            url: "https://highlights-null.example",
+            highlights: [],
+          },
+        ],
+      },
+      {
+        body: {
+          results: [{ title: "Numeric URL", url: 5, highlights: [] }],
+        },
+        expected: [{ title: "Numeric URL", url: 5, highlights: [] }],
+      },
+    ];
+    const { exaSearch } = await import("@/lib/search/exa-client");
+
+    for (const testCase of payloads) {
+      fetchMock.mockResolvedValueOnce(exaResponseBody(testCase.body));
+      await expect(
+        exaSearch({ query: "tolerant" }, "exa-test"),
+      ).resolves.toEqual(testCase.expected);
+    }
+  });
+});
+
+function exaResponseBody(body: unknown): Response {
+  return new Response(JSON.stringify(body), {
+    status: 200,
+    headers: { "content-type": "application/json" },
+  });
+}

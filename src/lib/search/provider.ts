@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { createExaProvider } from "./exa";
 import { createFirecrawlProvider } from "./firecrawl";
+import { withSearchPolicy } from "./policy";
 import { createTavilyProvider } from "./tavily";
-import type { SearchProvider } from "./types";
+import type { RawSearchProvider, SearchProvider } from "./types";
 
 const searchProviderIdSchema = z
   .enum(["exa", "firecrawl", "tavily"])
@@ -17,12 +18,17 @@ export function createSearchProvider(
     throw new Error(`Unsupported search provider: ${id}`);
   }
 
+  let backend: RawSearchProvider;
   switch (parsed.data) {
     case "exa":
-      return createExaProvider(apiKey);
+      backend = createExaProvider(apiKey);
+      break;
     case "firecrawl":
-      return createFirecrawlProvider(apiKey);
+      backend = createFirecrawlProvider(apiKey);
+      break;
     case "tavily":
-      return createTavilyProvider(apiKey);
+      backend = createTavilyProvider(apiKey);
+      break;
   }
+  return withSearchPolicy(backend);
 }

@@ -1,3 +1,5 @@
+import type { SearchRequest } from "./request";
+
 export interface SearchResult {
   title: string;
   url: string;
@@ -10,7 +12,7 @@ export interface SearchOptions {
   excludeDomains?: string[];
   startPublishedDate?: string;
   livecrawl?: "always" | "fallback" | "never";
-  budget?: SearchBudget;
+  budget: SearchBudget;
   usage?: SearchUsage;
 }
 
@@ -29,4 +31,9 @@ export interface SearchUsage {
   cacheHits: number;
   rateLimit429s: number;
   fallbackHits: number;
+}
+
+export interface RawSearchProvider {
+  readonly id: SearchProvider["id"];
+  search(query: string, request: SearchRequest): Promise<SearchResult[]>;
 }

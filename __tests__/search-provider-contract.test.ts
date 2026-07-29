@@ -1,9 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  createSearchBudget,
   createSearchProvider,
   type SearchOptions,
   type SearchProvider,
 } from "@/lib/search";
+
+vi.mock("@/lib/search/cache", () => ({
+  cacheKeyFor: (_input: unknown, provider: string) => `${provider}-key`,
+  readSearchCache: async () => null,
+  writeSearchCache: async () => undefined,
+}));
 
 const originalFetch = global.fetch;
 
@@ -44,9 +51,9 @@ describe("search provider selection", () => {
 
 describe("Firecrawl search provider", () => {
   it("maps the v2 search response into shared search results", async () => {
-    let request: { url: string; init: RequestInit } | undefined;
+    const requests: Array<{ url: string; init: RequestInit }> = [];
     global.fetch = vi.fn(async (input: string | URL | Request, init?: RequestInit) => {
-      request = { url: String(input), init: init ?? {} };
+      requests.push({ url: String(input), init: init ?? {} });
       return new Response(
         JSON.stringify({
           success: true,
@@ -68,6 +75,7 @@ describe("Firecrawl search provider", () => {
       numResults: 3,
       includeDomains: ["acme.example"],
       excludeDomains: ["spam.example"],
+      budget: createSearchBudget("default"),
     };
     const results = await createSearchProvider(
       "firecrawl",
@@ -81,11 +89,11 @@ describe("Firecrawl search provider", () => {
         highlights: ["Acme builds rockets."],
       },
     ]);
-    expect(request?.url).toBe("https://api.firecrawl.dev/v2/search");
-    expect(new Headers(request?.init.headers).get("authorization")).toBe(
+    expect(requests[0]?.url).toBe("https://api.firecrawl.dev/v2/search");
+    expect(new Headers(requests[0]?.init.headers).get("authorization")).toBe(
       "Bearer fc-test",
     );
-    expect(JSON.parse(String(request?.init.body))).toMatchObject({
+    expect(JSON.parse(String(requests[0]?.init.body))).toMatchObject({
       query: "acme rockets",
       limit: 3,
       includeDomains: ["acme.example"],
@@ -115,7 +123,11 @@ describe("Tavily search provider", () => {
 
     const results = await createSearchProvider("tavily", "tvly-test").search(
       "acme funding",
-      { numResults: 4, startPublishedDate: "2026-01-01" },
+      {
+        numResults: 4,
+        startPublishedDate: "2026-01-01T23:59:59.000Z",
+        budget: createSearchBudget("default"),
+      },
     );
 
     expect(results).toEqual([

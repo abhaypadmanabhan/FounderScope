@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { responseError } from "./http";
-import type { SearchOptions, SearchProvider, SearchResult } from "./types";
+import type { RawSearchProvider, SearchResult } from "./types";
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
@@ -16,23 +16,23 @@ const tavilyResponseSchema = z.object({
     .optional(),
 });
 
-export function createTavilyProvider(apiKey: string): SearchProvider {
+export function createTavilyProvider(apiKey: string): RawSearchProvider {
   return {
     id: "tavily",
-    async search(query: string, opts: SearchOptions): Promise<SearchResult[]> {
+    async search(query, request): Promise<SearchResult[]> {
       const body: Record<string, unknown> = {
         query,
-        max_results: opts.numResults ?? 5,
+        max_results: request.numResults ?? 5,
         search_depth: "basic",
       };
-      if (opts.includeDomains && opts.includeDomains.length > 0) {
-        body.include_domains = opts.includeDomains;
+      if (request.includeDomains && request.includeDomains.length > 0) {
+        body.include_domains = request.includeDomains;
       }
-      if (opts.excludeDomains && opts.excludeDomains.length > 0) {
-        body.exclude_domains = opts.excludeDomains;
+      if (request.excludeDomains && request.excludeDomains.length > 0) {
+        body.exclude_domains = request.excludeDomains;
       }
-      if (opts.startPublishedDate) {
-        body.start_date = opts.startPublishedDate;
+      if (request.startPublishedDate) {
+        body.start_date = request.startPublishedDate.slice(0, 10);
       }
 
       const response = await fetch(TAVILY_ENDPOINT, {
