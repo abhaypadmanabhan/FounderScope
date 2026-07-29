@@ -195,7 +195,7 @@ describe("/api/research orchestrator", () => {
     for (const call of moatCalls) {
       expect(call.model).toBe("deepseek/deepseek-v4-pro");
       expect(call.maxOutputTokens).toBe(16384);
-      expect(call.toolNames).toEqual(["exa_search"]);
+      expect(call.toolNames).toEqual(["web_search"]);
       expect(call.providerOptions?.openrouter?.reasoning?.enabled).toBe(true);
     }
 
@@ -203,7 +203,7 @@ describe("/api/research orchestrator", () => {
     for (const call of nonMoatCalls) {
       expect(call.model).toBe("google/gemini-3.1-flash-lite");
       expect(call.maxOutputTokens).toBe(8192);
-      expect(call.toolNames).toEqual(["exa_search"]);
+      expect(call.toolNames).toEqual(["web_search"]);
       expect(call.providerOptions).toBeUndefined();
     }
   });

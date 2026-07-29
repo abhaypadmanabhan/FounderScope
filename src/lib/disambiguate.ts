@@ -5,10 +5,14 @@
 import { z } from "zod";
 import { runResearchCall, type ProviderConfig } from "./llm";
 
+// Deliberately permissive on emptiness. A `.min(1)` here would turn a model
+// that got the name and domain right but skipped the description into a total
+// schema failure, discarding the good fields — `normalizeDisambiguation` keeps
+// what the model got right and fills the rest from the user's input instead.
 export const DisambiguationSchema = z.object({
-  canonical_name: z.string(),
-  canonical_domain: z.string(),
-  one_line_description: z.string(),
+  canonical_name: z.string().trim(),
+  canonical_domain: z.string().trim(),
+  one_line_description: z.string().trim(),
   disambiguation_note: z.string().nullable(),
 });
 export type Disambiguation = z.infer<typeof DisambiguationSchema>;
@@ -85,14 +89,53 @@ Begin researching now using web_search. When done, output JSON only.`;
       schema: DisambiguationSchema,
       cacheKey: "founderscope:disambiguate",
     });
-    return result.data;
+    return normalizeDisambiguation(result.data, opts.name, opts.domain);
   } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[disambiguate] failed; using raw input as canonical identity:",
-        (err as Error)?.message,
-      );
-    }
+    // Not dev-gated. The first live run returned canonical_domain:"" and
+    // one_line_description:"" for Linear and nothing said why — because this
+    // branch ran and its warning was compiled out. Every section prompt is
+    // built from these fields, so a silent fallback degrades all seven
+    // sections at once and must be visible in production logs.
+    console.error(
+      `[disambiguate] failed for "${opts.name}"; falling back to raw input as canonical identity:`,
+      (err as Error)?.message ?? err,
+    );
     return fallback;
   }
+}
+
+/**
+ * Keep whatever the model got right, fill the rest from the user's input.
+ *
+ * A model that answers with empty strings passes `z.string()` validation, so
+ * without this the blanks flow straight into all seven section prompts as an
+ * empty company name and an empty description. Filling `canonical_name` at
+ * least keeps the prompts coherent; an empty description is survivable but
+ * worth logging, because it is the difference between a grounded prompt and a
+ * vague one.
+ */
+export function normalizeDisambiguation(
+  data: Disambiguation,
+  inputName: string,
+  inputDomain: string | null,
+): Disambiguation {
+  const normalized: Disambiguation = {
+    canonical_name: data.canonical_name.trim() || inputName,
+    canonical_domain: data.canonical_domain.trim() || (inputDomain ?? ""),
+    one_line_description: data.one_line_description.trim(),
+    disambiguation_note: data.disambiguation_note?.trim() || null,
+  };
+
+  const blank = (
+    ["canonical_name", "canonical_domain", "one_line_description"] as const
+  ).filter((field) => data[field].trim().length === 0);
+
+  if (blank.length > 0) {
+    console.warn(
+      `[disambiguate] model returned empty ${blank.join(", ")} for "${inputName}"; ` +
+        "filled from user input where possible",
+    );
+  }
+
+  return normalized;
 }

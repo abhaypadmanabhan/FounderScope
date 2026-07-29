@@ -10,6 +10,7 @@ import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import {
   APICallError,
   NoObjectGeneratedError,
+  NoOutputGeneratedError,
   Output,
   generateText,
   stepCountIs,
@@ -29,13 +30,44 @@ import { maxOutputTokensFor, modelFor } from "./models";
 import { parseModelJson, withRetry } from "./shared";
 import type { ModelTier, RunArgs, RunResult } from "./types";
 
-const TIMEOUT_MS = 60_000;
+/**
+ * Per model round trip — one request/response with OpenRouter, not the whole
+ * loop. This is what the old adapter's 60s meant: it wrapped a single
+ * `messages.create` inside a `while` loop bounded by MAX_TURNS = 12.
+ *
+ * Moving to `generateText` inverted the scope without changing the number: one
+ * call now contains every round trip, every web search and the final
+ * structured-output step, so a flat 60s abort around it killed any section that
+ * searched more than once or twice. The first live run lost 3 of 7 sections
+ * exactly this way. `timeout.stepMs` restores the per-turn meaning — the SDK
+ * arms a fresh step timer on each iteration of its loop.
+ */
+export const STEP_TIMEOUT_MS = 60_000;
+
+/**
+ * Ceiling for the whole loop, scaled to the steps the loop is allowed rather
+ * than picked as a round number. Equivalent to the old effective ceiling of
+ * MAX_TURNS × per-turn timeout: 10 min for the default tier, 12 for reasoning,
+ * against the old 12 × 60s = 12 min. It is a backstop against a wedged run,
+ * not a target — a healthy section finishes in well under a minute.
+ */
+export function totalTimeoutMsFor(tier: ModelTier): number {
+  return stepBudgetFor(tier) * STEP_TIMEOUT_MS;
+}
+
 const isDev = process.env.NODE_ENV !== "production";
 
-// Kept as `exa_search` even though the backend is now swappable: every section
-// prompt names this tool, and so does the budget-exhausted instruction the
-// model reads. Renaming it is a prompt change, not a plumbing change.
-export const SEARCH_TOOL_NAME = "exa_search";
+// `web_search`, because that is the name every prompt in the repo actually
+// uses: src/lib/sections/shared.ts:122,126,141 and src/lib/disambiguate.ts:24,68
+// all instruct the model to "use web_search". b1 registered it as `exa_search`
+// on the assumption that the prompts named the EXA tool — they never did; that
+// name only ever existed for the Anthropic adapter's client-side tool, while
+// the prompts were written against Anthropic's native `web_search`.
+//
+// So for the whole first live run, all 8 calls were told to use a tool that did
+// not exist. Renaming here fixes every prompt at once without editing a single
+// file outside this module.
+export const SEARCH_TOOL_NAME = "web_search";
 
 const SEARCH_TOOL_DESCRIPTION =
   "Search the public web. Returns a list of {title, url, highlights} hits. " +
@@ -72,8 +104,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   );
 
   const openrouter = createOpenRouter({ apiKey: config.openrouterKey });
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const stepBudget = stepBudgetFor(tier);
 
   try {
     const result = await generateText({
@@ -92,9 +123,13 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       },
       // Structured output alongside tools: generateObject cannot do this.
       output: Output.object({ schema }),
-      stopWhen: stepCountIs(stepBudgetFor(tier)),
+      stopWhen: stepCountIs(stepBudget),
       maxOutputTokens: maxOutputTokensFor(tier),
-      abortSignal: controller.signal,
+      // Per-step and overall, never one flat abort around the whole loop.
+      timeout: {
+        stepMs: STEP_TIMEOUT_MS,
+        totalMs: totalTimeoutMsFor(tier),
+      },
       ...(tier === "reasoning"
         ? {
             providerOptions: {
@@ -104,9 +139,10 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
         : {}),
     });
 
+    const text = collectStepText(result);
     return {
-      data: result.output as T,
-      raw: result.text,
+      data: readOutput(result, text, schema, stepBudget),
+      raw: text,
       modelVersion: result.response?.modelId ?? modelId,
       usage,
     };
@@ -124,8 +160,71 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       };
     }
     throw mapSdkError(err, modelId);
-  } finally {
-    clearTimeout(timer);
+  }
+}
+
+/**
+ * Everything the model said across the whole loop, not just the final step.
+ * When the structured output never lands, this text is the only thing left to
+ * recover a section from — a model that answers in prose on step 3 and then
+ * stops has still done the work.
+ */
+interface StepLike {
+  text?: string;
+}
+
+interface ResultLike {
+  text?: string;
+  steps?: readonly StepLike[];
+  finishReason?: string;
+}
+
+function collectStepText(result: ResultLike): string {
+  const parts = (result.steps ?? [])
+    .map((step) => step.text ?? "")
+    .filter((text) => text.trim().length > 0);
+  if (parts.length > 0) return parts.join("\n");
+  return result.text ?? "";
+}
+
+/**
+ * `result.output` is a getter that throws NoOutputGeneratedError when the loop
+ * ended without an object — which is what the first live run hit on `traction`,
+ * surfacing as an unexplained "Unexpected OpenRouter error: No output
+ * generated." The model running out of steps, or answering in prose instead of
+ * calling the output tool, must not read like an internal fault: recover from
+ * the text if there is any, and otherwise say exactly what happened.
+ */
+function readOutput<T>(
+  result: ResultLike & { output?: unknown },
+  text: string,
+  schema: RunArgs<T>["schema"],
+  stepBudget: number,
+): T {
+  try {
+    return result.output as T;
+  } catch (err) {
+    if (!NoOutputGeneratedError.isInstance(err)) throw err;
+
+    if (text.trim().length > 0) {
+      if (isDev) {
+        console.warn(
+          "[openrouter] no structured output; recovering from step text",
+        );
+      }
+      return parseModelJson(text, schema, "openrouter");
+    }
+
+    const stepsUsed = result.steps?.length ?? 0;
+    throw new ResearchError(
+      "model_error",
+      `Model emitted no final JSON object: the tool loop ended after ${stepsUsed} of ${stepBudget} allowed steps ` +
+        `(finishReason=${result.finishReason ?? "unknown"}) and left no text to recover from. ` +
+        (stepsUsed >= stepBudget
+          ? "It ran out of steps — raise the step budget or cut the search budget."
+          : "It stopped early without answering."),
+      {},
+    );
   }
 }
 
@@ -172,9 +271,15 @@ function mapSdkError(err: unknown, modelId: string): ResearchError {
 
   const name = (err as { name?: string })?.name;
   if (name === "AbortError" || name === "TimeoutError") {
+    // The SDK's own message names which clock ran out ("Step timeout of
+    // 60000ms exceeded" vs "Total timeout of ..."), which is the difference
+    // between one slow round trip and a loop that never converged.
+    const detail = (err as Error)?.message ?? "";
     return new ResearchError(
       "timeout",
-      `OpenRouter call timed out after ${TIMEOUT_MS}ms`,
+      detail
+        ? `OpenRouter call aborted: ${detail}`
+        : `OpenRouter call aborted before finishing`,
       { cause: err },
     );
   }
