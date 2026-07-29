@@ -7,8 +7,8 @@ Only pull requests targeting `main` trigger automated review.
 
 ## Automated review
 
-CodeRabbit is configured in `.github/coderabbit.yaml` to run only on PRs whose
-base branch is `main`:
+CodeRabbit is configured at the repository root in `.coderabbit.yaml` to run
+only on PRs whose base branch is `main`:
 
 ```yaml
 reviews:
@@ -18,9 +18,12 @@ reviews:
       - "main"
 ```
 
-Because `dev` is not the repository default branch and is not listed in
-`base_branches`, PRs targeting `dev` do not trigger CodeRabbit. Direct pushes to
-`dev` are not blocked by this gate.
+CodeRabbit's `base_branches` setting adds reviewed branches on top of the
+repository default branch; it does not replace the default branch. Because the
+default branch is `main`, listing `main` in `base_branches` is redundant but
+makes the intent explicit. `dev` is neither the default branch nor listed in
+`base_branches`, so PRs targeting `dev` do not trigger CodeRabbit. Direct pushes
+to `dev` are not blocked by this gate.
 
 ## Manual gates before a release PR
 
