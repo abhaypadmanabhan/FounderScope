@@ -90,17 +90,43 @@ Begin researching now using web_search. When done, output JSON only.`;
       cacheKey: "founderscope:disambiguate",
     });
     return normalizeDisambiguation(result.data, opts.name, opts.domain);
-  } catch (err) {
-    // Not dev-gated. The first live run returned canonical_domain:"" and
-    // one_line_description:"" for Linear and nothing said why — because this
-    // branch ran and its warning was compiled out. Every section prompt is
-    // built from these fields, so a silent fallback degrades all seven
-    // sections at once and must be visible in production logs.
+  } catch (searchErr) {
+    // Second attempt, no tools. Three live runs took the fallback here, and the
+    // fallback is worthless: it emits the user's raw input with an empty domain
+    // and an empty description, and those two strings are interpolated into all
+    // seven section prompts.
+    //
+    // Whatever failed above was the tool loop — a step budget exhausted on
+    // failing searches, a timeout, an objectless finish. None of that stops the
+    // model from knowing what Linear is. A single-shot call with no tools
+    // cannot exhaust a step budget because there are no tool steps, so it fails
+    // for genuinely different reasons than the first attempt.
     console.error(
-      `[disambiguate] failed for "${opts.name}"; falling back to raw input as canonical identity:`,
-      (err as Error)?.message ?? err,
+      `[disambiguate] search-backed attempt failed for "${opts.name}"; retrying without tools:`,
+      (searchErr as Error)?.message ?? searchErr,
     );
-    return fallback;
+    try {
+      const result = await runResearchCall({
+        config: opts.config,
+        tier: "default",
+        prompt: `${prompt}\n\nNOTE: web_search is unavailable for this attempt. Answer from your own knowledge of this company. If you genuinely do not recognise it, return the name as given with your best guess at the domain.`,
+        schema: DisambiguationSchema,
+        cacheKey: "founderscope:disambiguate",
+        tools: "none",
+      });
+      return normalizeDisambiguation(result.data, opts.name, opts.domain);
+    } catch (err) {
+      // Not dev-gated. The first live run returned canonical_domain:"" and
+      // one_line_description:"" for Linear and nothing said why — because this
+      // branch ran and its warning was compiled out. Every section prompt is
+      // built from these fields, so a silent fallback degrades all seven
+      // sections at once and must be visible in production logs.
+      console.error(
+        `[disambiguate] both attempts failed for "${opts.name}"; falling back to raw input as canonical identity:`,
+        (err as Error)?.message ?? err,
+      );
+      return fallback;
+    }
   }
 }
 

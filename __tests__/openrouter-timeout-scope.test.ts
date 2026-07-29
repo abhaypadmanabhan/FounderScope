@@ -105,7 +105,7 @@ describe("timeout scope", () => {
     });
     // Comparable to the old adapter's effective ceiling of MAX_TURNS × 60s.
     expect(totalTimeoutMsFor("default")).toBe(stepBudgetFor("default") * 60_000);
-    expect(totalTimeoutMsFor("reasoning")).toBe(12 * 60_000);
+    expect(totalTimeoutMsFor("reasoning")).toBe(14 * 60_000);
     expect(totalTimeoutMsFor("default")).toBeGreaterThan(60_000);
   });
 
@@ -291,7 +291,7 @@ describe("no structured output", () => {
     }).catch((e) => e);
 
     expect(err.category).toBe("model_error");
-    expect(err.message).toContain("1 of 10 allowed steps");
+    expect(err.message).toContain("1 of 12 allowed steps");
     expect(err.message).toContain("stopped early");
   });
 });

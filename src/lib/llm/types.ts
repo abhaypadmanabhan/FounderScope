@@ -33,6 +33,13 @@ export interface RunArgs<T> {
   prompt: string;
   schema: ZodType<T>;
   /**
+   * "search" (default) gives the model the web_search tool. "none" runs a
+   * single-shot call with no tools at all — no tool loop, no step budget to
+   * exhaust. Used as a second attempt for disambiguation, where the model's
+   * own knowledge of a well-known company beats returning nothing.
+   */
+  tools?: "search" | "none";
+  /**
    * Stable prompt cache key.
    * Format: "founderscope:section:<sectionKey>" or "founderscope:disambiguate".
    */

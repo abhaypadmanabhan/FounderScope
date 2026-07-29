@@ -101,14 +101,26 @@ const MAX_RESULTS = 10;
 /**
  * Steps the SDK is allowed before it gives up.
  *
- * Worst case for a tier: the model spends its whole search budget one call per
- * step (8 default / 10 reasoning), makes one more call that comes back
- * budget-exhausted, then needs a final step to emit the structured object.
- * Generating that object counts as its own step — set this too low and the run
- * ends with tool results and no JSON. Hence budget + 2.
+ * b1 used budget + 2, reasoned from a best case: 8 search steps, one
+ * budget-exhausted call, one output step — exactly 10, with no slack at all.
+ * The third live run then lost four default-tier sections to
+ * "ran out of steps after 10 of 10 (finishReason=tool-calls)", which is what
+ * a zero-slack ceiling looks like when anything costs an extra turn:
+ *
+ *   - a model that emits one tool call per step rather than batching them
+ *     spends the entire search budget on steps, one for one;
+ *   - a failed search still consumes budget, so a bad run reaches the cap
+ *     without ever returning a result;
+ *   - a second budget-exhausted call, or one turn of prose between searches,
+ *     is enough on its own to push the output step past the ceiling.
+ *
+ * Budget + 4 costs nothing when the model converges early — `stopWhen` is a
+ * ceiling, not a target, and a section that searches four times and answers
+ * still takes five steps. It only spends more when the alternative was losing
+ * the section entirely.
  */
 export function stepBudgetFor(tier: ModelTier): number {
-  return SEARCH_BUDGET[tier] + 2;
+  return SEARCH_BUDGET[tier] + 4;
 }
 
 export async function runOpenRouter<T>(args: RunArgs<T>): Promise<RunResult<T>> {
@@ -117,6 +129,7 @@ export async function runOpenRouter<T>(args: RunArgs<T>): Promise<RunResult<T>> 
 
 async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
   const { config, tier, prompt, schema } = args;
+  const withTools = (args.tools ?? "search") === "search";
   const modelId = modelFor(tier);
   const usage: SearchUsage = createSearchUsage();
   const budget = createSearchBudget(tier);
@@ -127,22 +140,36 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
 
   const openrouter = createOpenRouter({ apiKey: config.openrouterKey });
   const stepBudget = stepBudgetFor(tier);
+  const trace: ToolTrace = { attempts: 0, failures: 0, lastError: null };
 
   try {
     const result = await generateText({
       model: openrouter(modelId),
       prompt,
-      tools: {
-        [SEARCH_TOOL_NAME]: tool({
-          description: SEARCH_TOOL_DESCRIPTION,
-          inputSchema: SEARCH_TOOL_INPUT_SCHEMA,
-          execute: async ({ query, num_results }) =>
-            runSearchTool(searchProvider, query, num_results, budget, usage),
-        }),
-      },
+      // No tools means no tool loop and no step budget to exhaust: the model
+      // answers from what it already knows, in one step.
+      ...(withTools
+        ? {
+            tools: {
+              [SEARCH_TOOL_NAME]: tool({
+                description: SEARCH_TOOL_DESCRIPTION,
+                inputSchema: SEARCH_TOOL_INPUT_SCHEMA,
+                execute: async ({ query, num_results }) =>
+                  runSearchTool(
+                    searchProvider,
+                    query,
+                    num_results,
+                    budget,
+                    usage,
+                    trace,
+                  ),
+              }),
+            },
+          }
+        : {}),
       // Structured output alongside tools: generateObject cannot do this.
       output: Output.object({ schema }),
-      stopWhen: stepCountIs(stepBudget),
+      stopWhen: stepCountIs(withTools ? stepBudget : 2),
       maxOutputTokens: maxOutputTokensFor(tier),
       // Per-step and overall, never one flat abort around the whole loop.
       timeout: {
@@ -160,7 +187,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
 
     const text = collectStepText(result);
     return {
-      data: readOutput(result, text, schema, stepBudget),
+      data: assertPopulated(readOutput(result, text, schema, stepBudget, trace)),
       raw: text,
       modelVersion: result.response?.modelId ?? modelId,
       usage,
@@ -172,11 +199,16 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
     if (NoObjectGeneratedError.isInstance(err) && err.text) {
       const salvaged = parseModelJson(err.text, schema, "openrouter");
       return {
-        data: salvaged,
+        data: assertPopulated(salvaged),
         raw: err.text,
         modelVersion: err.response?.modelId ?? modelId,
         usage,
       };
+    }
+    // generateText can reject with this instead of surfacing it on the getter.
+    // Same failure, same explanation — otherwise it reads as an internal fault.
+    if (NoOutputGeneratedError.isInstance(err)) {
+      throw noOutputError(0, stepBudget, undefined, trace);
     }
     throw mapSdkError(err, modelId);
   }
@@ -214,11 +246,83 @@ function collectStepText(result: ResultLike): string {
  * calling the output tool, must not read like an internal fault: recover from
  * the text if there is any, and otherwise say exactly what happened.
  */
+/**
+ * A section whose `claims` array is empty has no grounded content: no cited
+ * fact, nothing for the citation validator to check, nothing on the page. It
+ * passes Zod because the schema allows an empty array, and the third live run
+ * counted two such sections as successes. They are not. Fail loudly so the
+ * section reports `section_failed` rather than rendering blank.
+ *
+ * Only fires when the schema actually has `claims` — disambiguation and any
+ * future claim-less output are untouched.
+ */
+export function assertPopulated<T>(data: T): T {
+  const claims = (data as { claims?: unknown })?.claims;
+  if (Array.isArray(claims) && claims.length === 0) {
+    throw new ResearchError(
+      "model_error",
+      "Section returned zero claims. A schema-valid but empty section is not a result — " +
+        "the model answered without grounding anything.",
+      {},
+    );
+  }
+  return data;
+}
+
+/**
+ * The one failure the live runs kept producing, explained. Raised from both
+ * places the SDK can signal it: the `output` getter on a returned result, and
+ * `generateText` itself rejecting.
+ */
+function noOutputError(
+  stepsUsed: number,
+  stepBudget: number,
+  finishReason: string | undefined,
+  trace: ToolTrace,
+): ResearchError {
+  const steps =
+    stepsUsed > 0
+      ? `after ${stepsUsed} of ${stepBudget} allowed steps `
+      : `after an unknown number of ${stepBudget} allowed steps `;
+  return new ResearchError(
+    "model_error",
+    `Model emitted no final JSON object: the tool loop ended ${steps}` +
+      `(finishReason=${finishReason ?? "unknown"}) and left no text to recover from. ` +
+      (stepsUsed >= stepBudget
+        ? "It ran out of steps."
+        : "It stopped early without answering.") +
+      // Without this, "ran out of steps" is ambiguous between a model that
+      // searched productively and one that spent every step on a failing tool
+      // call. Those need opposite fixes.
+      ` ${describeTrace(trace)}`,
+    {},
+  );
+}
+
+/** Per-call record of how the search tool actually behaved. */
+interface ToolTrace {
+  attempts: number;
+  failures: number;
+  lastError: string | null;
+}
+
+function describeTrace(trace: ToolTrace): string {
+  if (trace.attempts === 0) return "The model never called web_search.";
+  if (trace.failures === 0) {
+    return `web_search ran ${trace.attempts} time(s), all successful.`;
+  }
+  return (
+    `web_search ran ${trace.attempts} time(s), ${trace.failures} failed. ` +
+    `Last search error: ${trace.lastError ?? "unknown"}.`
+  );
+}
+
 function readOutput<T>(
   result: ResultLike & { output?: unknown },
   text: string,
   schema: RunArgs<T>["schema"],
   stepBudget: number,
+  trace: ToolTrace,
 ): T {
   try {
     return result.output as T;
@@ -234,15 +338,11 @@ function readOutput<T>(
       return parseModelJson(text, schema, "openrouter");
     }
 
-    const stepsUsed = result.steps?.length ?? 0;
-    throw new ResearchError(
-      "model_error",
-      `Model emitted no final JSON object: the tool loop ended after ${stepsUsed} of ${stepBudget} allowed steps ` +
-        `(finishReason=${result.finishReason ?? "unknown"}) and left no text to recover from. ` +
-        (stepsUsed >= stepBudget
-          ? "It ran out of steps — raise the step budget or cut the search budget."
-          : "It stopped early without answering."),
-      {},
+    throw noOutputError(
+      result.steps?.length ?? 0,
+      stepBudget,
+      result.finishReason,
+      trace,
     );
   }
 }
@@ -260,9 +360,13 @@ async function runSearchTool(
   numResults: number | undefined,
   budget: ReturnType<typeof createSearchBudget>,
   usage: SearchUsage,
+  trace: ToolTrace,
 ): Promise<string> {
+  trace.attempts++;
   const trimmedQuery = query.trim();
   if (trimmedQuery.length === 0) {
+    trace.failures++;
+    trace.lastError = "empty query";
     return JSON.stringify({
       error: "empty query",
       message: "Call web_search again with a non-empty query string.",
@@ -280,6 +384,8 @@ async function runSearchTool(
     // A bare array is a different contract.
     return JSON.stringify({ results });
   } catch (err) {
+    trace.failures++;
+    trace.lastError = (err as Error)?.message ?? String(err);
     if (err instanceof SearchBudgetExhaustedError) {
       return JSON.stringify({
         error: err.message,
