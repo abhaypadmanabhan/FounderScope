@@ -1,0 +1,7 @@
+# CodeRabbit configuration
+# Review only pull requests whose base branch is main.
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - "main"
