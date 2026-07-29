@@ -150,6 +150,25 @@ describe("purgeRemovedKeys", () => {
     });
   });
 
+  // localStorage is shared across the whole origin. Another tool's entry that
+  // merely ends in one of our removed names is not ours to delete.
+  it("spares entries outside our namespaces that end in a removed name", () => {
+    storage.setItem("integration-backup:anthropic_api_key", "keep-me");
+    storage.setItem("backup:legacy:kimi_api_key", "keep-me-too");
+    storage.setItem("fs:user-1:extra:anthropic_api_key", "not-our-layout");
+    storage.setItem("my_anthropic_api_key", "different-name");
+    storage.setItem("fs:user-1:anthropic_api_key", "sk-ant-1");
+
+    purgeRemovedKeys();
+
+    expect(snapshot()).toEqual({
+      "integration-backup:anthropic_api_key": "keep-me",
+      "backup:legacy:kimi_api_key": "keep-me-too",
+      "fs:user-1:extra:anthropic_api_key": "not-our-layout",
+      "my_anthropic_api_key": "different-name",
+    });
+  });
+
   it("is idempotent — repeated runs change nothing further", () => {
     storage.setItem("fs:user-1:kimi_api_key", "km-1");
     storage.setItem("fs:user-1:exa_api_key", "exa-1");
@@ -196,14 +215,73 @@ describe("migrateLegacyKeys", () => {
     });
   });
 
-  it("never overwrites a key already scoped to the user", () => {
+  it("never overwrites a key already scoped to the user, and keeps the loser", () => {
     storage.setItem("fs:user-1:exa_api_key", "exa-mine");
     storage.setItem("legacy:exa_api_key", "exa-old");
 
     migrateLegacyKeys("user-1");
 
     expect(readKey("user-1", "exa_api_key")).toBe("exa-mine");
-    expect(storage.getItem("legacy:exa_api_key")).toBeNull();
+    // A source we did not migrate is a credential we have no right to destroy.
+    expect(storage.getItem("legacy:exa_api_key")).toBe("exa-old");
+  });
+
+  it("keeps the prefixed source when the bare source wins the scoped slot", () => {
+    storage.setItem("exa_api_key", "exa-bare");
+    storage.setItem("legacy:exa_api_key", "exa-prefixed");
+
+    migrateLegacyKeys("user-1");
+
+    expect(snapshot()).toEqual({
+      "fs:user-1:exa_api_key": "exa-bare",
+      "legacy:exa_api_key": "exa-prefixed",
+    });
+  });
+
+  it("drops a source only once the target holds that exact value", () => {
+    storage.setItem("exa_api_key", "  exa-same  ");
+    storage.setItem("legacy:exa_api_key", "exa-same");
+
+    migrateLegacyKeys("user-1");
+
+    // Both sources carry the same credential, so both are safe to clear.
+    expect(snapshot()).toEqual({ "fs:user-1:exa_api_key": "exa-same" });
+  });
+
+  it("migrates into a scoped slot holding only whitespace", () => {
+    storage.setItem("fs:user-1:exa_api_key", "   ");
+    storage.setItem("legacy:exa_api_key", "exa-real");
+
+    migrateLegacyKeys("user-1");
+
+    // Whitespace is already read as absent, so it must not shadow a real key.
+    expect(snapshot()).toEqual({ "fs:user-1:exa_api_key": "exa-real" });
+  });
+
+  it("does not let user A's settings load destroy user B's pending legacy key", () => {
+    storage.setItem("fs:user-a:exa_api_key", "exa-a");
+    storage.setItem("legacy:exa_api_key", "exa-b");
+
+    migrateLegacyKeys("user-a");
+    expect(storage.getItem("legacy:exa_api_key")).toBe("exa-b");
+
+    migrateLegacyKeys("user-b");
+
+    expect(snapshot()).toEqual({
+      "fs:user-a:exa_api_key": "exa-a",
+      "fs:user-b:exa_api_key": "exa-b",
+    });
+  });
+
+  it("is idempotent — a second run changes nothing", () => {
+    storage.setItem("exa_api_key", "exa-bare");
+    storage.setItem("legacy:openrouter_api_key", "sk-or-v1-abc");
+
+    migrateLegacyKeys("user-1");
+    const afterFirst = snapshot();
+    migrateLegacyKeys("user-1");
+
+    expect(snapshot()).toEqual(afterFirst);
   });
 
   it("does nothing for a signed-out visitor", () => {

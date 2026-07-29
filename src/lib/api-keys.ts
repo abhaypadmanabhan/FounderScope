@@ -38,6 +38,17 @@ export const SEARCH_KEY_BY_PROVIDER: Record<SearchProviderId, KeyName> = {
 // would strand a returning user with dead credentials they cannot see.
 const REMOVED_KEY_NAMES = ["anthropic_api_key", "kimi_api_key"] as const;
 
+// Exactly the three layouts this app can produce for a stored key: the bare
+// name (pre-scoping), `legacy:<name>` (signed-out), and `fs:<user-id>:<name>`
+// (signed-in). Supabase user ids are UUIDs and contain no colon, so `[^:]+`
+// pins the scoped form to three segments. Matching on the trailing name alone
+// would also hit entries this app never wrote — localStorage is shared across
+// the whole origin, and deleting someone else's `<something>:anthropic_api_key`
+// is not ours to do. The names are literal identifiers, so no escaping.
+const REMOVED_KEY_PATTERN = new RegExp(
+  `^(?:fs:[^:]+:|legacy:)?(?:${REMOVED_KEY_NAMES.join("|")})$`,
+);
+
 function scoped(userId: string | null, name: KeyName): string {
   return userId ? `fs:${userId}:${name}` : `legacy:${name}`;
 }
@@ -87,26 +98,39 @@ export function readAllKeys(userId: string | null): KeyBundle {
 // current user's namespace. Run on first authenticated load. Both the bare
 // name and the `legacy:` prefix are checked — signed-out writes land under
 // `legacy:`, un-scoped writes predate that prefix entirely.
+//
+// A source is removed only once the target provably holds that same value.
+// Anything else stays put: two sources can hold two different credentials, and
+// `legacy:` in particular is a live namespace that a *different* signed-out
+// user may have just written to. Deleting a source we did not migrate would
+// destroy a key with no way to get it back. The cost of being conservative is
+// a stale duplicate; the cost of being wrong is a lost credential.
+//
+// A whitespace-only target holds no credential — `readAllKeys` already reads it
+// as absent — so it does not block a real key from migrating in.
 export function migrateLegacyKeys(userId: string | null): void {
   if (typeof window === "undefined" || !userId) return;
+  const storage = window.localStorage;
   for (const name of KEY_NAMES) {
     const target = scoped(userId, name);
     for (const source of [name, `legacy:${name}`]) {
-      const legacyValue = window.localStorage.getItem(source);
-      if (!legacyValue) continue;
-      if (!window.localStorage.getItem(target)) {
-        window.localStorage.setItem(target, legacyValue);
+      const sourceValue = nonEmpty(storage.getItem(source));
+      if (!sourceValue) continue;
+      if (!nonEmpty(storage.getItem(target))) {
+        storage.setItem(target, sourceValue);
       }
-      window.localStorage.removeItem(source);
+      if (storage.getItem(target) === sourceValue) {
+        storage.removeItem(source);
+      }
     }
   }
 }
 
-// Deletes every stored Anthropic/Kimi key, whatever namespace it landed in —
-// bare, `legacy:`-prefixed, or scoped to any user id. Idempotent by
-// construction: removing an absent entry is a no-op, so this is safe on every
-// load. Deliberately not gated behind a "purged" marker — a marker would skip
-// the cleanup for a second user signing into the same browser.
+// Deletes every stored Anthropic/Kimi key this app wrote — bare,
+// `legacy:`-prefixed, or scoped to any user id, and nothing else in the origin.
+// Idempotent by construction: removing an absent entry is a no-op, so this is
+// safe on every load. Deliberately not gated behind a "purged" marker — a
+// marker would skip the cleanup for a second user signing into the same browser.
 export function purgeRemovedKeys(): void {
   if (typeof window === "undefined") return;
   const storage = window.localStorage;
@@ -114,10 +138,7 @@ export function purgeRemovedKeys(): void {
   for (let i = 0; i < storage.length; i++) {
     const storageKey = storage.key(i);
     if (storageKey === null) continue;
-    const name = storageKey.slice(storageKey.lastIndexOf(":") + 1);
-    if ((REMOVED_KEY_NAMES as readonly string[]).includes(name)) {
-      doomed.push(storageKey);
-    }
+    if (REMOVED_KEY_PATTERN.test(storageKey)) doomed.push(storageKey);
   }
   // Collected first: removing during iteration reindexes the store.
   for (const storageKey of doomed) storage.removeItem(storageKey);
