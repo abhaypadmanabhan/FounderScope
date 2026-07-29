@@ -18,7 +18,7 @@ dev — it does not apply to evals.
 | `domains.ts` | Per-section domain allowlists (spec D5) |
 | `scorers/` | Four deterministic, free scorers (no LLM judges) |
 | `research.eval.ts` | Evalite runner entries (task wiring pending B1) |
-| `evalite.config.ts` | Runner timeouts/concurrency |
+| `../evalite.config.ts` | Runner timeouts/concurrency (project root) |
 
 ## Scorers
 
@@ -36,7 +36,7 @@ dev — it does not apply to evals.
 npm run eval
 ```
 
-Unit tests for scorers (no API calls): `npm test -- __tests__/evals-scorers`
+Unit tests for scorers (no API calls): `npm test -- __tests__/evals-scorers-deterministic.test.ts`
 
 ## Status
 

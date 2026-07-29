@@ -18,20 +18,26 @@ export function domainAdherenceForSection(
   return inAllowlist / citations.length;
 }
 
+/** Global fraction of all citations inside their section allowlist (weighted by count). */
 export function aggregateDomainAdherence(
   output: ResearchEvalOutput
 ): number | null {
-  const rates: number[] = [];
+  let total = 0;
+  let inAllowlist = 0;
 
   for (const section of output.sections) {
-    const rate = domainAdherenceForSection(
+    const allowlist = allowlistForSection(
       section.sectionKey,
-      output.company.maturity,
-      section.citations
+      output.company.maturity
     );
-    if (rate !== null) rates.push(rate);
+    for (const citation of section.citations) {
+      total++;
+      if (urlMatchesAllowlist(citation.url, allowlist)) {
+        inAllowlist++;
+      }
+    }
   }
 
-  if (rates.length === 0) return null;
-  return rates.reduce((sum, r) => sum + r, 0) / rates.length;
+  if (total === 0) return null;
+  return inAllowlist / total;
 }

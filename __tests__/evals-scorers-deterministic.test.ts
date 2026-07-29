@@ -132,6 +132,27 @@ describe("domain adherence scorer", () => {
     ).toBe(true);
   });
 
+  it("does not false-positive when path contains but does not start with /investor", () => {
+    expect(
+      urlMatchesAllowlist("https://example.com/not-investor/page", ["/investor"])
+    ).toBe(false);
+    expect(
+      urlMatchesAllowlist("https://example.com/foo/investors", ["/investors"])
+    ).toBe(false);
+    expect(
+      urlMatchesAllowlist("https://example.com/not-careers/page", ["/careers"])
+    ).toBe(false);
+  });
+
+  it("matches path-prefix entries at segment boundaries", () => {
+    expect(
+      urlMatchesAllowlist("https://stripe.com/investors/reports", ["/investors"])
+    ).toBe(true);
+    expect(
+      urlMatchesAllowlist("https://resend.com/careers", ["/careers"])
+    ).toBe(true);
+  });
+
   it("scores early-stage snapshot citations against allowlist", () => {
     const section = earlyStageFixture.sections[0];
     const rate = domainAdherenceForSection(
@@ -155,10 +176,46 @@ describe("domain adherence scorer", () => {
   it("scores enterprise SEC citations", () => {
     expect(aggregateDomainAdherence(enterpriseFixture)).toBe(1);
   });
+
+  it("weights aggregate adherence globally by citation count, not per-section average", () => {
+    const adherent = (id: number) => ({
+      id,
+      url: "https://www.sec.gov/edgar/browse/?CIK=0000000000",
+      quote: "filing",
+      claim: `claim ${id}`,
+      status: "resolved" as const,
+    });
+
+    const output = {
+      company: enterpriseFixture.company,
+      sections: [
+        {
+          sectionKey: "snapshot",
+          content: {},
+          citations: [
+            {
+              id: 0,
+              url: "https://example.com/off-allowlist",
+              quote: "bad",
+              claim: "off list",
+              status: "resolved" as const,
+            },
+          ],
+        },
+        {
+          sectionKey: "funding",
+          content: {},
+          citations: Array.from({ length: 99 }, (_, i) => adherent(i + 1)),
+        },
+      ],
+    };
+
+    expect(aggregateDomainAdherence(output)).toBeCloseTo(0.99);
+  });
 });
 
 describe("evalite scorer wrappers", () => {
-  it("schemaPassScorer returns 1 for valid anthropic fixture output", () => {
+  it("schemaPassScorer returns 1 for valid anthropic fixture output", async () => {
     const fixture = JSON.parse(
       fs.readFileSync(
         path.resolve(process.cwd(), "__fixtures__/research-anthropic.json"),
@@ -175,9 +232,8 @@ describe("evalite scorer wrappers", () => {
       })),
     };
 
-    return schemaPassScorer({ input: output.company, output }).then((score) => {
-      expect(score.score).toBe(1);
-    });
+    const score = await schemaPassScorer({ input: output.company, output });
+    expect(score.score).toBe(1);
   });
 
   it("computeMetrics returns all four deterministic signals", () => {

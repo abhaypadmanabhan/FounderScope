@@ -64,7 +64,7 @@ export function urlMatchesAllowlist(
     const normalized = entry.toLowerCase();
 
     if (normalized.startsWith("/")) {
-      if (path.includes(normalized)) return true;
+      if (path === normalized || path.startsWith(`${normalized}/`)) return true;
       continue;
     }
 
