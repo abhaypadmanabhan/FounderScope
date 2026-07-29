@@ -36,23 +36,62 @@ import type { ModelTier, RunArgs, RunResult } from "./types";
  * `messages.create` inside a `while` loop bounded by MAX_TURNS = 12.
  *
  * Moving to `generateText` inverted the scope without changing the number: one
- * call now contains every round trip, every web search and the final
- * structured-output step, so a flat 60s abort around it killed any section that
- * searched more than once or twice. The first live run lost 3 of 7 sections
- * exactly this way. `timeout.stepMs` restores the per-turn meaning — the SDK
+ * call now contains every round trip, every web search and the final output
+ * step, so a flat 60s abort around it killed any section that searched more
+ * than once or twice. `timeout.stepMs` restores the per-turn meaning — the SDK
  * arms a fresh step timer on each iteration of its loop.
  */
-export const STEP_TIMEOUT_MS = 60_000;
+const FAST_STEP_TIMEOUT_MS = 60_000;
 
 /**
- * Ceiling for the whole loop, scaled to the steps the loop is allowed rather
- * than picked as a round number. Equivalent to the old effective ceiling of
- * MAX_TURNS × per-turn timeout: 10 min for the default tier, 12 for reasoning,
- * against the old 12 × 60s = 12 min. It is a backstop against a wedged run,
- * not a target — a healthy section finishes in well under a minute.
+ * The reasoning tier gets four times as long per step, because one structural
+ * difference between the tiers makes a single step legitimately slower: a
+ * thinking phase. `deepseek-v4-pro` runs with `reasoning.effort: "medium"` and
+ * a 16k output ceiling, so one step is thinking tokens plus a long section
+ * body — a few thousand tokens, which at the 20-60 tok/s a large hosted model
+ * typically sustains is 100-300 seconds. The sixth live run proved the lower
+ * bound the hard way: moat died on `Step timeout of 60000ms exceeded` while
+ * every default-tier section passed on the same 60s.
+ *
+ * 240s sits above that band with room for provider queueing, and is still a
+ * useful signal rather than a blanket increase: a step past four minutes is
+ * wedged, not thinking. It is deliberately scaled to the one thing that
+ * differs, not raised for both tiers.
+ */
+const REASONING_STEP_TIMEOUT_MS = 240_000;
+
+export function stepTimeoutMsFor(tier: ModelTier): number {
+  return tier === "reasoning"
+    ? REASONING_STEP_TIMEOUT_MS
+    : FAST_STEP_TIMEOUT_MS;
+}
+
+/**
+ * How many steps in a loop may plausibly be slow ones.
+ *
+ * A reasoning section does not think on every step: most steps are a tool call
+ * and a short turn around a search result, which run at fast-tier speed. The
+ * thinking happens when it plans and when it writes the final body. Two is that
+ * shape with a little room.
+ */
+const SLOW_STEP_ALLOWANCE = 2;
+
+/**
+ * Ceiling for the whole loop — a backstop against a wedged run, not a target.
+ * Summing the per-step ceiling across every step would give the reasoning tier
+ * 56 minutes, which is not a backstop, it is an abandonment. Instead: allow a
+ * couple of genuinely slow steps at that tier's ceiling and price the rest at
+ * fast-tier speed.
+ *
+ * For the default tier both constants are 60s, so this reduces exactly to the
+ * previous `stepBudget × 60s` — 12 minutes, the old adapter's effective
+ * MAX_TURNS × per-turn ceiling, unchanged. The reasoning tier lands on 20
+ * minutes.
  */
 export function totalTimeoutMsFor(tier: ModelTier): number {
-  return stepBudgetFor(tier) * STEP_TIMEOUT_MS;
+  const slow = Math.min(SLOW_STEP_ALLOWANCE, stepBudgetFor(tier));
+  const fast = stepBudgetFor(tier) - slow;
+  return slow * stepTimeoutMsFor(tier) + fast * FAST_STEP_TIMEOUT_MS;
 }
 
 const isDev = process.env.NODE_ENV !== "production";
@@ -188,7 +227,7 @@ async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
       maxOutputTokens: maxOutputTokensFor(tier),
       // Per-step and overall, never one flat abort around the whole loop.
       timeout: {
-        stepMs: STEP_TIMEOUT_MS,
+        stepMs: stepTimeoutMsFor(tier),
         totalMs: totalTimeoutMsFor(tier),
       },
       ...(tier === "reasoning"
