@@ -14,12 +14,14 @@ import {
   runResearchCall,
   ResearchError,
   selectProvider,
-  createExaUsage,
-  mergeExaUsage,
   type ProviderConfig,
   type Keys,
-  type ExaUsage,
 } from "@/lib/llm";
+import {
+  createSearchUsage,
+  mergeSearchUsage,
+  type SearchUsage,
+} from "@/lib/search";
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
@@ -38,14 +40,14 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   const headerKeys: Keys = {
-    anthropic: request.headers.get("x-anthropic-key"),
-    kimi: request.headers.get("x-kimi-key"),
-    exa: request.headers.get("x-exa-key"),
+    openrouter: request.headers.get("x-openrouter-key"),
+    search: request.headers.get("x-search-key"),
+    searchProvider: request.headers.get("x-search-provider"),
   };
   const keys: Keys = {
-    anthropic: headerKeys.anthropic ?? process.env.ANTHROPIC_API_KEY ?? null,
-    kimi: headerKeys.kimi ?? process.env.KIMI_API_KEY ?? null,
-    exa: headerKeys.exa ?? process.env.EXA_API_KEY ?? null,
+    openrouter: headerKeys.openrouter ?? process.env.OPENROUTER_API_KEY ?? null,
+    search: headerKeys.search ?? process.env.EXA_API_KEY ?? null,
+    searchProvider: headerKeys.searchProvider,
   };
 
   let body: z.infer<typeof bodySchema>;
@@ -94,8 +96,8 @@ export async function POST(request: Request) {
 
   if (process.env.NODE_ENV !== "production") {
     console.log(
-      `[research] provider=${config.provider} search=${config.searchBackend} keySource=${
-        headerKeys[config.provider] ? "header" : "env"
+      `[research] provider=openrouter search=${config.searchProvider} keySource=${
+        headerKeys.openrouter ? "header" : "env"
       }`,
     );
   }
@@ -183,7 +185,7 @@ export async function POST(request: Request) {
         };
 
         const totals: RequestTotals = {
-          usage: createExaUsage(),
+          usage: createSearchUsage(),
           totalClaims: 0,
           citedClaims: 0,
         };
@@ -227,7 +229,7 @@ export async function POST(request: Request) {
 }
 
 type RequestTotals = {
-  usage: ExaUsage;
+  usage: SearchUsage;
   totalClaims: number;
   citedClaims: number;
 };
@@ -275,7 +277,7 @@ async function runOneSection(args: RunSectionArgs) {
       prompt: basePrompt,
     });
 
-    if (result.usage) mergeExaUsage(totals.usage, result.usage);
+    if (result.usage) mergeSearchUsage(totals.usage, result.usage);
     totals.totalClaims += result.totalClaims;
     totals.citedClaims += result.citedClaims;
 

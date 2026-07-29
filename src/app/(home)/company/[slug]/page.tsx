@@ -9,9 +9,12 @@ import { padOrder } from "@/lib/sections/format";
 import type { Citation, RendererCompany } from "@/lib/sections/types";
 import { RefreshButton } from "@/components/refresh-button";
 import {
+  buildKeyHeaders,
   getCurrentUserId,
   migrateLegacyKeys,
-  readKey,
+  purgeRemovedKeys,
+  readAllKeys,
+  type KeyBundle,
 } from "@/lib/api-keys";
 
 type SectionState =
@@ -115,11 +118,8 @@ export default function CompanyPage({ params }: PageProps) {
         // Cache miss (404), empty shell, or forced refresh — kick off research.
         const userId = await getCurrentUserId();
         migrateLegacyKeys(userId);
-        const keys = {
-          anthropic: readKey(userId, "anthropic_api_key"),
-          kimi: readKey(userId, "kimi_api_key"),
-          exa: readKey(userId, "exa_api_key"),
-        };
+        purgeRemovedKeys();
+        const keys = readAllKeys(userId);
 
         setPhase("researching");
         await runResearch({
@@ -425,7 +425,7 @@ function formatStamp(d: Date): string {
 
 type RunResearchArgs = {
   slug: string;
-  keys: { anthropic: string | null; kimi: string | null; exa: string | null };
+  keys: KeyBundle;
   force: boolean;
   signal: AbortSignal;
   onCompany: (c: Company) => void;
@@ -440,10 +440,10 @@ function humanizeSlug(s: string): string {
 
 async function runResearch(args: RunResearchArgs) {
   const { slug, keys, force, signal, onCompany, onSection, onDone, onError } = args;
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
-  if (keys.anthropic) headers["x-anthropic-key"] = keys.anthropic;
-  if (keys.kimi) headers["x-kimi-key"] = keys.kimi;
-  if (keys.exa) headers["x-exa-key"] = keys.exa;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...buildKeyHeaders(keys),
+  };
 
   const res = await fetch("/api/research", {
     method: "POST",
