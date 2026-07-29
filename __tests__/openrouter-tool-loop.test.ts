@@ -58,7 +58,7 @@ const config = {
 
 function toolFrom(params: Record<string, unknown>): ToolExecute {
   const tools = params.tools as Record<string, { execute: ToolExecute }>;
-  return tools.exa_search.execute;
+  return tools.web_search.execute;
 }
 
 beforeEach(() => {
