@@ -92,7 +92,7 @@ describe("POST /api/research auth + history", () => {
     getUserMock.mockResolvedValue({ data: { user: { id: "u1" } } });
     const req = new Request("https://app.test/api/research", {
       method: "POST",
-      headers: { "x-anthropic-key": "k" },
+      headers: { "x-openrouter-key": "sk-or-v1-k", "x-search-key": "exa-k" },
       body: JSON.stringify({ name: "Stripe" }),
     });
     const res = await POST(req);
