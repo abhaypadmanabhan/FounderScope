@@ -39,6 +39,7 @@ vi.mock("ai", async (importOriginal) => {
 });
 
 import { runResearchCall } from "@/lib/llm";
+import { ResearchError } from "@/lib/llm/errors";
 import { SEARCH_BUDGET, createSearchBudget, createSearchUsage } from "@/lib/search";
 import { SearchMisconfiguredError, withSearchPolicy } from "@/lib/search/policy";
 
@@ -313,5 +314,175 @@ describe("policy misuse cannot become a TypeError in the tool callback", () => {
     // one live call. Fewer would legitimately cost a second.
     expect(results).toHaveLength(3);
     expect(usage.calls).toBe(1);
+  });
+});
+
+describe("an empty section is a failure, not a success", () => {
+  const sectionSchema = z.object({
+    summary: z.string(),
+    claims: z.array(
+      z.object({ id: z.number(), text: z.string() }),
+    ),
+  });
+
+  it("rejects a schema-valid object with zero claims", async () => {
+    generateTextImpl = async () => ({
+      ...okResult,
+      output: { summary: "Nothing found.", claims: [] },
+    });
+
+    const err = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema: sectionSchema,
+    }).catch((e) => e);
+
+    expect(err).toBeInstanceOf(ResearchError);
+    expect(err.category).toBe("model_error");
+    expect(err.message).toContain("zero claims");
+  });
+
+  it("rejects an empty section recovered through the salvage path too", async () => {
+    const { NoObjectGeneratedError } = await import("ai");
+    generateTextImpl = async () => {
+      throw new NoObjectGeneratedError({
+        message: "no object generated",
+        text: '{"summary":"Nothing found.","claims":[]}',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        response: { id: "r", timestamp: new Date(0), modelId: "m" } as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        usage: {} as any,
+        finishReason: "stop",
+      });
+    };
+
+    const err = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema: sectionSchema,
+    }).catch((e) => e);
+
+    expect(err.category).toBe("model_error");
+    expect(err.message).toContain("zero claims");
+  });
+
+  it("accepts a section with at least one claim", async () => {
+    generateTextImpl = async () => ({
+      ...okResult,
+      output: {
+        summary: "Found something.",
+        claims: [{ id: 1, text: "Linear was founded in 2019." }],
+      },
+    });
+
+    const result = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema: sectionSchema,
+    });
+
+    expect(
+      (result.data as { claims: unknown[] }).claims.length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("leaves claim-less output shapes alone — disambiguation has no claims", async () => {
+    const disambigSchema = z.object({ canonical_name: z.string() });
+    generateTextImpl = async () => ({
+      ...okResult,
+      output: { canonical_name: "Linear" },
+    });
+
+    const result = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema: disambigSchema,
+    });
+
+    expect(result.data).toEqual({ canonical_name: "Linear" });
+  });
+});
+
+describe("search telemetry survives to RunResult", () => {
+  it("reports the real count when searches succeed", async () => {
+    generateTextImpl = async (params) => {
+      const tool = toolFrom(params);
+      await tool.execute({ query: "a" });
+      await tool.execute({ query: "b" });
+      return okResult;
+    };
+
+    const result = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema,
+    });
+
+    expect(result.usage?.calls).toBe(2);
+    expect(result.usage?.calls).not.toBe(0);
+  });
+
+  it("reports zero only when nothing succeeded, and says why in the failure", async () => {
+    fetchMock.mockImplementation(async () => {
+      throw new Error("EXA 401: invalid api key");
+    });
+
+    const { NoOutputGeneratedError } = await import("ai");
+    generateTextImpl = async (params) => {
+      const tool = toolFrom(params);
+      await tool.execute({ query: "a" });
+      await tool.execute({ query: "b" });
+      throw new NoOutputGeneratedError();
+    };
+
+    const err = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema,
+    }).catch((e) => e);
+
+    // usage.calls === 0 with no explanation was the third live run's report for
+    // every section. The message now distinguishes "never searched" from
+    // "searched and every one failed".
+    expect(err.message).toContain("web_search ran 2 time(s), 2 failed");
+    expect(err.message).toContain("EXA 401: invalid api key");
+  });
+
+  it("says so plainly when the model never called the tool at all", async () => {
+    const { NoOutputGeneratedError } = await import("ai");
+    generateTextImpl = async () => {
+      throw new NoOutputGeneratedError();
+    };
+
+    const err = await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema,
+    }).catch((e) => e);
+
+    expect(err.message).toContain("The model never called web_search.");
+  });
+});
+
+describe("tools: none", () => {
+  it("registers no tools and does not spend a step budget", async () => {
+    await runResearchCall({
+      config,
+      tier: "default",
+      prompt: "p",
+      schema,
+      tools: "none",
+    });
+
+    const params = generateTextCalls[0];
+    expect(params.tools).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

@@ -469,7 +469,14 @@ function cannedJsonForPrompt(prompt: string): string {
           full_bio: "Founder of Stripe. Earlier sold Auctomatic.",
         },
       ],
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("Research the tech stack")) {
@@ -488,7 +495,14 @@ function cannedJsonForPrompt(prompt: string): string {
         methodology: "2 founders × 6mo × SF salary band.",
       },
       stack_evolution: "Migrated from Heroku to AWS at scale.",
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("funding history")) {
@@ -505,7 +519,14 @@ function cannedJsonForPrompt(prompt: string): string {
       ],
       total_raised_usd: 2000000,
       milestones: [{ date: "2011-09", label: "Public launch", kind: "product" }],
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("traction signals")) {
@@ -515,7 +536,14 @@ function cannedJsonForPrompt(prompt: string): string {
       web_traffic_trend: "unknown",
       web_traffic_note: "n/a",
       other_signals: [],
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("market and competitive landscape")) {
@@ -532,7 +560,14 @@ function cannedJsonForPrompt(prompt: string): string {
         { name: "Braintree", domain: "braintreepayments.com", positioning: "PayPal-owned." },
       ],
       category_growth_rate: "~15% CAGR",
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   return "{}";

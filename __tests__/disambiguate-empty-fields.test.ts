@@ -5,13 +5,13 @@
 // strings — `z.string()` accepts "" without complaint.
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
-let runImpl: () => Promise<{ data: unknown }>;
+let runImpl: (args?: { tools?: string }) => Promise<{ data: unknown }>;
 
 vi.mock("@/lib/llm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/llm")>();
   return {
     ...actual,
-    runResearchCall: () => runImpl(),
+    runResearchCall: (args: { tools?: string }) => runImpl(args),
   };
 });
 
@@ -162,7 +162,7 @@ describe("disambiguateCompany", () => {
   // company with no domain hint, the fallback object and a fully-blank model
   // answer normalise to byte-identical output. Only the logs tell them apart,
   // which is why both paths now log.
-  it("produces identical output whether the model failed or answered blank", async () => {
+  it("produces identical output whether both attempts failed or the model answered blank", async () => {
     runImpl = async () => {
       throw new Error("boom");
     };
@@ -193,8 +193,9 @@ describe("disambiguateCompany", () => {
       one_line_description: "",
       disambiguation_note: null,
     });
-    // Distinguishable only here.
-    expect(error).toHaveBeenCalledTimes(1);
+    // Distinguishable only here. Two error lines for the failure path now:
+    // the search-backed attempt, then the no-tools retry.
+    expect(error).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalledTimes(1);
   });
 
@@ -239,8 +240,70 @@ describe("disambiguateCompany", () => {
       disambiguation_note: null,
     });
     expect(error).toHaveBeenCalledWith(
-      expect.stringContaining("falling back to raw input"),
+      expect.stringContaining("both attempts failed"),
       expect.stringContaining("Step timeout"),
     );
+  });
+});
+
+describe("the no-tools second attempt", () => {
+  it("recovers a real identity when the search-backed attempt burns its steps", async () => {
+    const calls: Array<{ tools?: string }> = [];
+    let attempt = 0;
+    runImpl = async (args?: { tools?: string }) => {
+      calls.push({ tools: args?.tools });
+      attempt++;
+      if (attempt === 1) {
+        throw new Error(
+          "Model emitted no final JSON object: the tool loop ended after 12 of 12 allowed steps",
+        );
+      }
+      return {
+        data: {
+          canonical_name: "Linear",
+          canonical_domain: "linear.app",
+          one_line_description: "Issue tracking and project planning for software teams.",
+          disambiguation_note: null,
+        },
+      };
+    };
+
+    const out = await disambiguateCompany({
+      config,
+      name: "Linear",
+      domain: null,
+    });
+
+    // The whole point: no more empty domain and empty description feeding all
+    // seven section prompts.
+    expect(out.canonical_domain).toBe("linear.app");
+    expect(out.one_line_description).not.toBe("");
+    expect(attempt).toBe(2);
+    expect(calls[0].tools).toBeUndefined();
+    expect(calls[1].tools).toBe("none");
+    expect(error).toHaveBeenCalledWith(
+      expect.stringContaining("retrying without tools"),
+      expect.stringContaining("12 of 12 allowed steps"),
+    );
+  });
+
+  it("does not make a second call when the first one works", async () => {
+    let attempt = 0;
+    runImpl = async () => {
+      attempt++;
+      return {
+        data: {
+          canonical_name: "Linear",
+          canonical_domain: "linear.app",
+          one_line_description: "Issue tracking.",
+          disambiguation_note: null,
+        },
+      };
+    };
+
+    await disambiguateCompany({ config, name: "Linear", domain: null });
+
+    expect(attempt).toBe(1);
+    expect(error).not.toHaveBeenCalled();
   });
 });

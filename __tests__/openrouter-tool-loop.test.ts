@@ -184,13 +184,17 @@ describe("budget exhaustion reaches the model", () => {
 });
 
 describe("step budget", () => {
-  it("leaves room for the structured-output step on top of the search budget", () => {
-    // The SDK counts emitting the object as its own step. Budget + 1 for the
-    // exhausted-blob call the model may still make, + 1 for that output step.
-    expect(stepBudgetFor("default")).toBe(SEARCH_BUDGET.default + 2);
-    expect(stepBudgetFor("reasoning")).toBe(SEARCH_BUDGET.reasoning + 2);
-    expect(stepBudgetFor("default")).toBe(10);
-    expect(stepBudgetFor("reasoning")).toBe(12);
+  it("leaves slack above the search budget, not just the output step", () => {
+    // budget + 2 was the arithmetic minimum and it cost four sections on the
+    // third live run: one tool call per step spends the budget one-for-one,
+    // failed searches still consume it, and a single extra turn of prose or a
+    // second exhausted call pushes the output step past the ceiling.
+    expect(stepBudgetFor("default")).toBe(SEARCH_BUDGET.default + 4);
+    expect(stepBudgetFor("reasoning")).toBe(SEARCH_BUDGET.reasoning + 4);
+    expect(stepBudgetFor("default")).toBe(12);
+    expect(stepBudgetFor("reasoning")).toBe(14);
+    // The point of the change: room for the whole search budget AND an answer.
+    expect(stepBudgetFor("default")).toBeGreaterThan(SEARCH_BUDGET.default + 2);
   });
 });
 
