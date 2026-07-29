@@ -5,41 +5,116 @@ import { Eye, EyeOff, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { selectProvider } from "@/lib/llm";
 import {
   getCurrentUserId,
+  keyReadiness,
   migrateLegacyKeys,
-  readKey,
+  purgeRemovedKeys,
+  readAllKeys,
   writeKey,
+  KEY_NAMES,
+  type KeyBundle,
   type KeyName,
 } from "@/lib/api-keys";
 
-const FIELDS = [
+interface FieldDef {
+  storageKey: KeyName;
+  label: string;
+  placeholder: string;
+  href: string;
+  required: boolean;
+  hint: string;
+  validate: (v: string) => boolean;
+}
+
+interface GroupDef {
+  id: string;
+  title: string;
+  note: string;
+  fields: readonly FieldDef[];
+}
+
+// Only OpenRouter's prefix is checked. The search backends are third parties
+// whose key formats can drift, and a stale prefix rule here would lock a user
+// out of saving a perfectly good key.
+const GROUPS: readonly GroupDef[] = [
   {
-    storageKey: "anthropic_api_key",
-    label: "Anthropic API key",
-    placeholder: "sk-ant-…",
-    href: "https://console.anthropic.com/settings/keys",
-    validate: (v: string) => v.startsWith("sk-ant-") && v.length > 20,
+    id: "inference",
+    title: "Inference",
+    note: "Every model call routes through OpenRouter — one key, one bill.",
+    fields: [
+      {
+        storageKey: "openrouter_api_key",
+        label: "OpenRouter API key",
+        placeholder: "sk-or-v1-…",
+        href: "https://openrouter.ai/keys",
+        required: true,
+        hint: "Roughly $0.14 of credit per research run.",
+        validate: (v: string) => v.startsWith("sk-or-") && v.length > 20,
+      },
+    ],
   },
   {
-    storageKey: "kimi_api_key",
-    label: "Kimi API key",
-    placeholder: "sk-…",
-    href: "https://platform.moonshot.ai/console/api-keys",
-    validate: (v: string) => v.length > 10,
+    id: "search",
+    title: "Web search",
+    note: "Required. No model in the map can search the web on its own, so without a search key every report would be ungrounded.",
+    fields: [
+      {
+        storageKey: "exa_api_key",
+        label: "EXA API key",
+        placeholder: "Exa key…",
+        href: "https://dashboard.exa.ai",
+        required: true,
+        hint: "Default backend. Used unless you leave it blank.",
+        validate: (v: string) => v.length > 10,
+      },
+      {
+        storageKey: "firecrawl_api_key",
+        label: "Firecrawl API key",
+        placeholder: "fc-…",
+        href: "https://www.firecrawl.dev/app/api-keys",
+        required: false,
+        hint: "Swap-in. Used only when EXA is blank.",
+        validate: (v: string) => v.length > 10,
+      },
+      {
+        storageKey: "tavily_api_key",
+        label: "Tavily API key",
+        placeholder: "tvly-…",
+        href: "https://app.tavily.com/home",
+        required: false,
+        hint: "Swap-in. Used only when EXA and Firecrawl are blank.",
+        validate: (v: string) => v.length > 10,
+      },
+    ],
   },
-  {
-    storageKey: "exa_api_key",
-    label: "EXA API key",
-    placeholder: "Exa key…",
-    href: "https://dashboard.exa.ai",
-    validate: (v: string) => v.length > 10,
-  },
-] as const;
+];
+
+const SEARCH_PROVIDER_LABEL: Record<string, string> = {
+  exa: "EXA",
+  firecrawl: "Firecrawl",
+  tavily: "Tavily",
+};
+
+function emptyBundle(): KeyBundle {
+  const bundle = {} as KeyBundle;
+  for (const name of KEY_NAMES) bundle[name] = null;
+  return bundle;
+}
+
+function readinessLabel(keys: KeyBundle): string {
+  const readiness = keyReadiness(keys);
+  if (readiness.ok && readiness.searchProvider) {
+    return `Ready — OpenRouter + ${SEARCH_PROVIDER_LABEL[readiness.searchProvider]}`;
+  }
+  const wanted = readiness.missing.map((m) =>
+    m === "openrouter" ? "an OpenRouter key" : "a search key",
+  );
+  return `Not configured — add ${wanted.join(" and ")}.`;
+}
 
 export default function SettingsPage() {
-  const [keys, setKeys] = useState<Record<string, string>>({});
+  const [keys, setKeys] = useState<KeyBundle>(emptyBundle);
   const [userId, setUserId] = useState<string | null>(null);
   const [hydrated, setHydrated] = useState(false);
 
@@ -47,27 +122,16 @@ export default function SettingsPage() {
     (async () => {
       const id = await getCurrentUserId();
       migrateLegacyKeys(id);
-      const loaded: Record<string, string> = {};
-      for (const f of FIELDS) {
-        loaded[f.storageKey] = readKey(id, f.storageKey as KeyName) ?? "";
-      }
+      purgeRemovedKeys();
       setUserId(id);
-      setKeys(loaded);
+      setKeys(readAllKeys(id));
       setHydrated(true);
     })();
   }, []);
 
-  const routing = hydrated
-    ? selectProvider({
-        anthropic: keys["anthropic_api_key"] || null,
-        kimi: keys["kimi_api_key"] || null,
-        exa: keys["exa_api_key"] || null,
-      })
-    : null;
-
   return (
     <main className="mx-auto max-w-xl px-8 py-14">
-      <header className="mb-10">
+      <header className="mb-12">
         <div className="eyebrow mb-2">Settings</div>
         <h1
           className="font-serif"
@@ -75,55 +139,61 @@ export default function SettingsPage() {
         >
           API keys
         </h1>
-        <p
-          className="mt-3 text-sm"
-          style={{ color: "var(--text-faint)" }}
-        >
+        <p className="mt-3 text-sm" style={{ color: "var(--text-faint)" }}>
           Stored only in this browser. Sent with each fresh research request.
           Never transmitted to FounderScope servers.
         </p>
       </header>
 
-      <section className="space-y-8">
-        {FIELDS.map((f) => (
-          <KeyField
-            key={f.storageKey}
-            field={f}
-            value={keys[f.storageKey] ?? ""}
-            onChange={(v) => setKeys((s) => ({ ...s, [f.storageKey]: v }))}
-            onSave={(v) => {
-              writeKey(userId, f.storageKey as KeyName, v);
-              toast.success(`${f.label} saved`);
-            }}
-            onClear={() => {
-              writeKey(userId, f.storageKey as KeyName, "");
-              setKeys((s) => ({ ...s, [f.storageKey]: "" }));
-              toast.success(`${f.label} cleared`);
-            }}
-          />
-        ))}
-      </section>
+      <div className="space-y-12">
+        {GROUPS.map((group) => (
+          <section key={group.id}>
+            <div
+              className="mb-1 border-t pt-5"
+              style={{ borderColor: "var(--border-faint)" }}
+            >
+              <div className="eyebrow">{group.title}</div>
+            </div>
+            <p
+              className="mb-7 text-sm"
+              style={{ color: "var(--text-faint)", maxWidth: "44ch" }}
+            >
+              {group.note}
+            </p>
 
-      {hydrated && routing && (
-        <p
-          className="mt-10 text-xs"
-          style={{ color: "var(--text-quiet)" }}
-        >
-          {routing.ok
-            ? `Active: ${routing.config.provider} + ${routing.config.searchBackend === "exa" ? "EXA" : "native search"}`
-            : `Not configured: ${routing.message}`}
+            <div className="space-y-8">
+              {group.fields.map((field) => (
+                <KeyField
+                  key={field.storageKey}
+                  field={field}
+                  value={keys[field.storageKey] ?? ""}
+                  onChange={(v) =>
+                    setKeys((s) => ({ ...s, [field.storageKey]: v }))
+                  }
+                  onSave={(v) => {
+                    writeKey(userId, field.storageKey, v);
+                    setKeys((s) => ({ ...s, [field.storageKey]: v }));
+                    toast.success(`${field.label} saved`);
+                  }}
+                  onClear={() => {
+                    writeKey(userId, field.storageKey, "");
+                    setKeys((s) => ({ ...s, [field.storageKey]: null }));
+                    toast.success(`${field.label} cleared`);
+                  }}
+                />
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {hydrated && (
+        <p className="mt-12 text-xs" style={{ color: "var(--text-quiet)" }}>
+          {readinessLabel(keys)}
         </p>
       )}
     </main>
   );
-}
-
-interface FieldDef {
-  storageKey: string;
-  label: string;
-  placeholder: string;
-  href: string;
-  validate: (v: string) => boolean;
 }
 
 function KeyField({
@@ -146,13 +216,18 @@ function KeyField({
 
   return (
     <div>
-      <label
-        htmlFor={field.storageKey}
-        className="block text-xs mb-2"
-        style={{ color: "var(--text-faint)", letterSpacing: "0.04em" }}
-      >
-        {field.label.toUpperCase()}
-      </label>
+      <div className="mb-2 flex items-baseline gap-2">
+        <label
+          htmlFor={field.storageKey}
+          className="block text-xs"
+          style={{ color: "var(--text-faint)", letterSpacing: "0.04em" }}
+        >
+          {field.label.toUpperCase()}
+        </label>
+        <span className="text-xs" style={{ color: "var(--text-quiet)" }}>
+          {field.required ? "Required" : "Optional"}
+        </span>
+      </div>
       <div className="flex items-center gap-2">
         <div className="relative flex-1">
           <Input
@@ -187,16 +262,21 @@ function KeyField({
           Clear
         </Button>
       </div>
-      <a
-        href={field.href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="mt-2 inline-flex items-center gap-1 text-xs underline-offset-4 hover:underline"
-        style={{ color: "var(--text-faint)" }}
-      >
-        Get a key →
-        <ExternalLink size={11} />
-      </a>
+      <div className="mt-2 flex items-center gap-3">
+        <a
+          href={field.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 text-xs underline-offset-4 hover:underline"
+          style={{ color: "var(--text-faint)" }}
+        >
+          Get a key →
+          <ExternalLink size={11} />
+        </a>
+        <span className="text-xs" style={{ color: "var(--text-quiet)" }}>
+          {field.hint}
+        </span>
+      </div>
     </div>
   );
 }
