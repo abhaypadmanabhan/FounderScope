@@ -80,10 +80,56 @@ looks for them deliberately.
 6. **Flat per-step timeout across tiers.** A reasoning model's thinking phase
    legitimately exceeds 60s; a flash model's does not.
 
-## Still open (non-blocking)
+## Merged to main
 
-- `evals/domains.ts` duplicates the planned `src/lib/search/domains.ts` (C1).
-- Firecrawl/Tavily are not null-tolerant the way EXA's parser now is.
-- `fs:<user-id>:` key parsing assumes a colon-free user id (true for Supabase UUIDs).
+PR #1 merged as `c9621f3` on 2026-07-30. Phases A and B complete.
+Both automated reviewers (CodeRabbit, Macroscope) **never ran** on that PR —
+CodeRabbit was rate limited, Macroscope was out of credits. The review it did
+get was adversarial cross-review per phase, `/simplify`, `/security-review`,
+and a manual code-review pass whose 2 HIGH + 2 MEDIUM findings were applied.
+
+## Next up
+
+- [ ] **Phase C1** — per-section `includeDomains` grounding (spec D5) + the
+      **first eval run**. The harness is merged but has NEVER been executed, so
+      the quality case for the cheaper model map — citation fill-rate, dead-link
+      rate, domain adherence before vs after — is still unmeasured. The
+      `~$0.14/research` figure is one company (Linear) on a warm search cache;
+      the colder run measured `$0.1417`. Treat it as a data point, not a benchmark.
+- [ ] **Click through `/settings` once signed in.** It has never been opened in
+      a browser. The markup was proven by server-rendering the component, but
+      the hydrated behaviours — load-time `purgeRemovedKeys`, save/clear toasts,
+      the readiness line — only run in `useEffect`/handlers. The Save button's
+      disabled condition changed after review (now gated on `hydrated`).
+- [ ] `evals/research.eval.ts` still throws "complete phase B1 first". B1 IS
+      merged, so `npm run eval` fails on every row of the golden set. Wire it.
+
+## Known gaps, deliberately deferred
+
+Each was found by review, judged, and left. None is a correctness bug in the
+merged path; all are recorded so the next person does not rediscover them.
+
+- `RunArgs.cacheKey` is inert — nothing reads it. It carried Anthropic prompt
+  caching, which died with the adapter. Either delete it (7 section files + 2
+  tests) or map it onto OpenRouter cache-control.
+- Search budget is debited **before** the cache read, so a cache hit still costs
+  a search slot. Identical to the pre-migration adapter; changing it is a
+  product decision, not a migration one.
+- Source-fallback issues a second live paid search that is never debited, so a
+  section can bill up to 2x its advertised cap. Also inherited.
+- `exaCompanyLogo` reads `process.env.EXA_API_KEY` and bypasses
+  `withSearchPolicy`, so it skips budget, cache, retry and usage — and a
+  Firecrawl/Tavily user silently gets no logo.
+- `exa_usage` still reports zero searches for a section that fails outright;
+  the counters are not attached to the thrown error. The retry-accumulation
+  half of this was fixed.
+- `evals/domains.ts` duplicates the planned `src/lib/search/domains.ts` (C1
+  should unify them, or the eval grades against a list the product never uses).
+- Firecrawl/Tavily response parsing is not null-tolerant the way EXA's now is.
+- Firecrawl `includeDomains`/`excludeDomains` are unverified against the live
+  v2 search API; if wrong, source-fallback silently no-ops for Firecrawl users.
+- `fs:<user-id>:` key parsing assumes a colon-free user id (true for Supabase
+  UUIDs today).
 - Host allowlist matching can false-positive on `foo.investors.com`.
-- **Phase C1 not started** — per-section `includeDomains` grounding + first eval run.
+- `src/lib/search/http.ts` encodes provider + status into an error *message*
+  that retry logic then re-parses; a typed error would be sturdier.
