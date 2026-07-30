@@ -31,6 +31,14 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/**
+ * The platform ceiling this route actually runs under. Without it the function
+ * would be cut at the deployment default while the LLM layer reasons about a
+ * 20-minute loop backstop, so the per-step ceilings it derives could never
+ * fire in production. Stated here so the two are visible together; raising the
+ * loop budgets above this value is pointless until this rises with it.
+ */
+export const maxDuration = 300;
 
 const bodySchema = z.object({
   name: z.string().min(1),

@@ -130,7 +130,19 @@ const SEARCH_TOOL_DESCRIPTION =
  * range moved into the description, where it guides without gating.
  */
 export const SEARCH_TOOL_INPUT_SCHEMA = z.object({
-  query: z.coerce.string(),
+  // `query` is deliberately NOT coerced. z.coerce.string() is String(input), so
+  // it turns a malformed call into a plausible-looking one rather than
+  // rejecting it: `{}` and a misnamed key both yield the string "undefined",
+  // `null` yields "null", an object yields "[object Object]". Each is longer
+  // than zero characters, so the empty-query guard in runSearchTool below
+  // cannot catch them, and the section spends a budget slot, a step and real
+  // money searching the web for the word "undefined".
+  //
+  // Failing validation here is the cheaper outcome: the SDK returns a
+  // repairable tool error and the model tries again. `num_results` keeps its
+  // coercion, which is what that leniency was actually added for — models do
+  // send it as a JSON string.
+  query: z.string().min(1),
   num_results: z.coerce.number().int().optional().catch(undefined),
 });
 
@@ -163,14 +175,22 @@ export function stepBudgetFor(tier: ModelTier): number {
 }
 
 export async function runOpenRouter<T>(args: RunArgs<T>): Promise<RunResult<T>> {
-  return withRetry(() => doCall(args));
+  // `usage` is created here, not per attempt, so a retry accumulates rather
+  // than discards. Searches paid for by a failed attempt are still real money;
+  // scoping the counter to one attempt made `exa_usage` report 8 when 16 had
+  // been billed. `budget` stays per-attempt — a fresh attempt genuinely gets a
+  // fresh cap, which is deliberate (see withRetry in ./shared).
+  const usage: SearchUsage = createSearchUsage();
+  return withRetry(() => doCall(args, usage));
 }
 
-async function doCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
+async function doCall<T>(
+  args: RunArgs<T>,
+  usage: SearchUsage,
+): Promise<RunResult<T>> {
   const { config, tier, prompt, schema } = args;
   const withTools = (args.tools ?? "search") === "search";
   const modelId = modelFor(tier);
-  const usage: SearchUsage = createSearchUsage();
   const budget = createSearchBudget(tier);
   const searchProvider = createSearchProvider(
     config.searchProvider,
@@ -287,12 +307,31 @@ interface ResultLike {
   finishReason?: string;
 }
 
-function collectStepText(result: ResultLike): string {
+/**
+ * Candidate texts to recover an answer from, best first.
+ *
+ * The last non-empty step is tried on its own before the concatenation of every
+ * step. Joining them unconditionally could destroy a section whose final step
+ * was perfectly valid: `extractJson` slices from the first `{` to the last `}`,
+ * so one earlier step containing a brace — narration, or the answer emitted
+ * twice because the model also called a tool in that step — spans two objects
+ * and fails to parse. The concatenation stays as the fallback, because
+ * recovering from a model that answered across steps is why it exists.
+ */
+function stepTextCandidates(result: ResultLike): string[] {
   const parts = (result.steps ?? [])
     .map((step) => step.text ?? "")
     .filter((text) => text.trim().length > 0);
-  if (parts.length > 0) return parts.join("\n");
-  return result.text ?? "";
+  const candidates: string[] = [];
+  const last = parts[parts.length - 1];
+  if (last) candidates.push(last);
+  if (parts.length > 1) candidates.push(parts.join("\n"));
+  if (candidates.length === 0 && result.text) candidates.push(result.text);
+  return candidates;
+}
+
+function collectStepText(result: ResultLike): string {
+  return stepTextCandidates(result)[0] ?? "";
 }
 
 /**
@@ -412,7 +451,22 @@ function parseToolLoopOutput<T>(
       trace,
     );
   }
-  return parseModelJson(text, schema, "openrouter");
+  // Try the last step alone, then the concatenation. `text` is already the
+  // first candidate; the rest only matter when it fails to parse, so a good
+  // final answer is never lost to an earlier step that happened to contain a
+  // brace. If every candidate fails, surface the first failure — it describes
+  // the model's actual final answer rather than a concatenation artefact.
+  const candidates = [text, ...stepTextCandidates(result).slice(1)];
+  let firstErr: unknown;
+  for (const candidate of candidates) {
+    if (candidate.trim().length === 0) continue;
+    try {
+      return parseModelJson(candidate, schema, "openrouter");
+    } catch (err) {
+      firstErr ??= err;
+    }
+  }
+  throw firstErr;
 }
 
 function readOutput<T>(

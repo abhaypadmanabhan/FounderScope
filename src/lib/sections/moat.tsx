@@ -458,6 +458,9 @@ export const moat: SectionDefinition<Output> = {
   buildPrompt: (c) =>
     buildSectionPrompt({
       company: c,
+      // moat is the only reasoning-tier section, and that tier's search cap is
+      // 10 rather than 8. The prompt must quote the cap the budget enforces.
+      tier: "reasoning",
       sectionTitle: "MOAT analysis",
       sectionInstructions: `Produce a MOAT analysis for ${c.name} for an audience of technical founders considering whether they could realistically compete.
 

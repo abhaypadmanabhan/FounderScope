@@ -306,7 +306,10 @@ describe("policy misuse cannot become a TypeError in the tool callback", () => {
     const provider = withSearchPolicy(backend);
     // @ts-expect-error budget is required on SearchOptions — omitting it must
     // not typecheck, so this defect cannot be reintroduced silently.
-    void provider.search("q", { numResults: 3 });
+    // Swallow the rejection: this call exists to prove the omission does not
+    // typecheck, and an unhandled rejection makes vitest warn about false
+    // positives across the whole suite.
+    provider.search("q", { numResults: 3 }).catch(() => {});
     expect(typeof provider.search).toBe("function");
   });
 
