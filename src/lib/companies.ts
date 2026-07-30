@@ -1,7 +1,7 @@
 // Company row resolution: find existing by slug, otherwise insert with collision handling.
 import { supabaseAdmin as supabase } from "./supabase/admin";
 import { resolveCollisionSlug, slugify } from "./slug";
-import { exaCompanyLogo } from "./llm/tools/exa-client";
+import { exaCompanyLogo } from "./search";
 
 export type CompanyRow = {
   id: string;

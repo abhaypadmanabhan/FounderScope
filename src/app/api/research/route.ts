@@ -14,12 +14,14 @@ import {
   runResearchCall,
   ResearchError,
   selectProvider,
-  createExaUsage,
-  mergeExaUsage,
   type ProviderConfig,
   type Keys,
-  type ExaUsage,
 } from "@/lib/llm";
+import {
+  createSearchUsage,
+  mergeSearchUsage,
+  type SearchUsage,
+} from "@/lib/search";
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
@@ -29,6 +31,14 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/**
+ * The platform ceiling this route actually runs under. Without it the function
+ * would be cut at the deployment default while the LLM layer reasons about a
+ * 20-minute loop backstop, so the per-step ceilings it derives could never
+ * fire in production. Stated here so the two are visible together; raising the
+ * loop budgets above this value is pointless until this rises with it.
+ */
+export const maxDuration = 300;
 
 const bodySchema = z.object({
   name: z.string().min(1),
@@ -38,14 +48,21 @@ const bodySchema = z.object({
 
 export async function POST(request: Request) {
   const headerKeys: Keys = {
-    anthropic: request.headers.get("x-anthropic-key"),
-    kimi: request.headers.get("x-kimi-key"),
-    exa: request.headers.get("x-exa-key"),
+    openrouter: request.headers.get("x-openrouter-key"),
+    search: request.headers.get("x-search-key"),
+    searchProvider: request.headers.get("x-search-provider"),
   };
+  // The provider is only honoured when the key came with it on the same
+  // request. Resolving them independently let a caller send
+  // `x-search-provider: tavily` with no `x-search-key`, which fell back to the
+  // operator's own EXA key and then handed it to Tavily — a credential the
+  // operator never chose to share with that vendor. A key and the backend it
+  // authenticates against travel together or not at all.
+  const usingServerSearchKey = headerKeys.search === null;
   const keys: Keys = {
-    anthropic: headerKeys.anthropic ?? process.env.ANTHROPIC_API_KEY ?? null,
-    kimi: headerKeys.kimi ?? process.env.KIMI_API_KEY ?? null,
-    exa: headerKeys.exa ?? process.env.EXA_API_KEY ?? null,
+    openrouter: headerKeys.openrouter ?? process.env.OPENROUTER_API_KEY ?? null,
+    search: headerKeys.search ?? process.env.EXA_API_KEY ?? null,
+    searchProvider: usingServerSearchKey ? null : headerKeys.searchProvider,
   };
 
   let body: z.infer<typeof bodySchema>;
@@ -94,8 +111,8 @@ export async function POST(request: Request) {
 
   if (process.env.NODE_ENV !== "production") {
     console.log(
-      `[research] provider=${config.provider} search=${config.searchBackend} keySource=${
-        headerKeys[config.provider] ? "header" : "env"
+      `[research] provider=openrouter search=${config.searchProvider} keySource=${
+        headerKeys.openrouter ? "header" : "env"
       }`,
     );
   }
@@ -146,7 +163,9 @@ export async function POST(request: Request) {
           disambiguation_note: disambig.disambiguation_note,
         });
 
-        await updateCompanyCanonical(
+        // Not awaited: neither write feeds companyInput, and awaiting them put
+        // two Supabase round trips of dead time in front of 7 LLM calls.
+        void updateCompanyCanonical(
           company.id,
           disambig.canonical_name,
           disambig.canonical_domain
@@ -158,7 +177,7 @@ export async function POST(request: Request) {
         // RLS (we don't have an UPDATE policy on search_history, so the
         // upsert's conflict path would otherwise fail).
         if (userId) {
-          await supabaseAdmin
+          void supabaseAdmin
             .from("search_history")
             .upsert(
               {
@@ -183,7 +202,7 @@ export async function POST(request: Request) {
         };
 
         const totals: RequestTotals = {
-          usage: createExaUsage(),
+          usage: createSearchUsage(),
           totalClaims: 0,
           citedClaims: 0,
         };
@@ -227,7 +246,7 @@ export async function POST(request: Request) {
 }
 
 type RequestTotals = {
-  usage: ExaUsage;
+  usage: SearchUsage;
   totalClaims: number;
   citedClaims: number;
 };
@@ -275,7 +294,7 @@ async function runOneSection(args: RunSectionArgs) {
       prompt: basePrompt,
     });
 
-    if (result.usage) mergeExaUsage(totals.usage, result.usage);
+    if (result.usage) mergeSearchUsage(totals.usage, result.usage);
     totals.totalClaims += result.totalClaims;
     totals.citedClaims += result.citedClaims;
 

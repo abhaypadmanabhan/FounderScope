@@ -5,10 +5,14 @@
 import { z } from "zod";
 import { runResearchCall, type ProviderConfig } from "./llm";
 
+// Deliberately permissive on emptiness. A `.min(1)` here would turn a model
+// that got the name and domain right but skipped the description into a total
+// schema failure, discarding the good fields — `normalizeDisambiguation` keeps
+// what the model got right and fills the rest from the user's input instead.
 export const DisambiguationSchema = z.object({
-  canonical_name: z.string(),
-  canonical_domain: z.string(),
-  one_line_description: z.string(),
+  canonical_name: z.string().trim(),
+  canonical_domain: z.string().trim(),
+  one_line_description: z.string().trim(),
   disambiguation_note: z.string().nullable(),
 });
 export type Disambiguation = z.infer<typeof DisambiguationSchema>;
@@ -85,14 +89,79 @@ Begin researching now using web_search. When done, output JSON only.`;
       schema: DisambiguationSchema,
       cacheKey: "founderscope:disambiguate",
     });
-    return result.data;
-  } catch (err) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "[disambiguate] failed; using raw input as canonical identity:",
-        (err as Error)?.message,
+    return normalizeDisambiguation(result.data, opts.name, opts.domain);
+  } catch (searchErr) {
+    // Second attempt, no tools. Three live runs took the fallback here, and the
+    // fallback is worthless: it emits the user's raw input with an empty domain
+    // and an empty description, and those two strings are interpolated into all
+    // seven section prompts.
+    //
+    // Whatever failed above was the tool loop — a step budget exhausted on
+    // failing searches, a timeout, an objectless finish. None of that stops the
+    // model from knowing what Linear is. A single-shot call with no tools
+    // cannot exhaust a step budget because there are no tool steps, so it fails
+    // for genuinely different reasons than the first attempt.
+    console.error(
+      `[disambiguate] search-backed attempt failed for "${opts.name}"; retrying without tools:`,
+      (searchErr as Error)?.message ?? searchErr,
+    );
+    try {
+      const result = await runResearchCall({
+        config: opts.config,
+        tier: "default",
+        prompt: `${prompt}\n\nNOTE: web_search is unavailable for this attempt. Answer from your own knowledge of this company. If you genuinely do not recognise it, return the name as given with your best guess at the domain.`,
+        schema: DisambiguationSchema,
+        cacheKey: "founderscope:disambiguate",
+        tools: "none",
+      });
+      return normalizeDisambiguation(result.data, opts.name, opts.domain);
+    } catch (err) {
+      // Not dev-gated. The first live run returned canonical_domain:"" and
+      // one_line_description:"" for Linear and nothing said why — because this
+      // branch ran and its warning was compiled out. Every section prompt is
+      // built from these fields, so a silent fallback degrades all seven
+      // sections at once and must be visible in production logs.
+      console.error(
+        `[disambiguate] both attempts failed for "${opts.name}"; falling back to raw input as canonical identity:`,
+        (err as Error)?.message ?? err,
       );
+      return fallback;
     }
-    return fallback;
   }
+}
+
+/**
+ * Keep whatever the model got right, fill the rest from the user's input.
+ *
+ * A model that answers with empty strings passes `z.string()` validation, so
+ * without this the blanks flow straight into all seven section prompts as an
+ * empty company name and an empty description. Filling `canonical_name` at
+ * least keeps the prompts coherent; an empty description is survivable but
+ * worth logging, because it is the difference between a grounded prompt and a
+ * vague one.
+ */
+export function normalizeDisambiguation(
+  data: Disambiguation,
+  inputName: string,
+  inputDomain: string | null,
+): Disambiguation {
+  const normalized: Disambiguation = {
+    canonical_name: data.canonical_name.trim() || inputName,
+    canonical_domain: data.canonical_domain.trim() || (inputDomain ?? ""),
+    one_line_description: data.one_line_description.trim(),
+    disambiguation_note: data.disambiguation_note?.trim() || null,
+  };
+
+  const blank = (
+    ["canonical_name", "canonical_domain", "one_line_description"] as const
+  ).filter((field) => data[field].trim().length === 0);
+
+  if (blank.length > 0) {
+    console.warn(
+      `[disambiguate] model returned empty ${blank.join(", ")} for "${inputName}"; ` +
+        "filled from user input where possible",
+    );
+  }
+
+  return normalized;
 }

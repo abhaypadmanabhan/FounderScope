@@ -1,0 +1,21 @@
+# CodeRabbit configuration
+# Review only pull requests whose base branch is main.
+reviews:
+  auto_review:
+    enabled: true
+    base_branches:
+      - "main"
+  # Keep the reviewer's attention on code a human would actually review.
+  # Without these, a migration PR reads as ~8.6k added lines when the
+  # production surface is ~1.9k: a generated lockfile alone is +1825, and the
+  # cross-agent instruction mirrors under .agent/.agents/.cursor/.codex/
+  # .opencode/.clinerules are symlinks and duplicated markdown.
+  path_filters:
+    - "!**/package-lock.json"
+    - "!.agent/**"
+    - "!.agents/**"
+    - "!.cursor/**"
+    - "!.codex/**"
+    - "!.opencode/**"
+    - "!.clinerules/**"
+    - "!.claude/commands/**"

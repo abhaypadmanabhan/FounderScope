@@ -1,29 +1,25 @@
 // Public surface. Sections + route.ts import runResearchCall from here.
 import type { RunArgs, RunResult } from "./types";
-import { runAnthropic } from "./adapters/anthropic";
-import { runKimi } from "./adapters/kimi";
+import { runOpenRouter } from "./openrouter";
 
-export { selectProvider } from "./provider";
-export type { SelectError, SelectResult } from "./provider";
+export { selectProvider } from "./select";
+export type { SelectError, SelectResult } from "./select";
 export { ResearchError } from "./errors";
 export type { ResearchErrorCategory } from "./errors";
+export { MODEL_MAP, modelFor } from "./models";
+export { SEARCH_TOOL_NAME, stepBudgetFor } from "./openrouter";
 export type {
-  ProviderId,
-  SearchBackend,
   ModelTier,
   Keys,
   ProviderConfig,
+  SearchProviderId,
   RunArgs,
   RunResult,
-  ExaUsage,
+  SearchUsage,
 } from "./types";
-export { createExaUsage, mergeExaUsage } from "./tools/exa-search";
 
+// One provider, one path. The switch this replaced existed only to pick
+// between two hand-rolled adapters.
 export async function runResearchCall<T>(args: RunArgs<T>): Promise<RunResult<T>> {
-  switch (args.config.provider) {
-    case "anthropic":
-      return runAnthropic(args);
-    case "kimi":
-      return runKimi(args);
-  }
+  return runOpenRouter(args);
 }

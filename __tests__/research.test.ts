@@ -8,10 +8,10 @@ const upsertCalls: Array<{ section_key: string; content: unknown }> = [];
 type SdkCall = {
   prompt: string;
   model: string;
+  toolNames: string[];
+  maxOutputTokens?: number;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  tools: any[];
-  betas?: string[];
-  maxTokens: number;
+  providerOptions?: any;
 };
 const sdkCalls: SdkCall[] = [];
 
@@ -52,49 +52,32 @@ vi.mock("@/lib/cache", () => ({
   }),
 }));
 
-vi.mock("@anthropic-ai/sdk", () => {
-  class APIErr extends Error {}
-  class AuthenticationError extends APIErr {}
-  class RateLimitError extends APIErr {}
-  class APIError extends APIErr {}
-  class APIUserAbortError extends APIErr {
-    name = "AbortError";
-  }
-  class MockAnthropic {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    beta: any;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    constructor(_opts: any) {
-      this.beta = {
-        messages: {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          create: async (params: any) => {
-            const prompt = String(params.messages[0].content);
-            promptHistory.push(prompt);
-            sdkCalls.push({
-              prompt,
-              model: params.model,
-              tools: params.tools,
-              betas: params.betas,
-              maxTokens: params.max_tokens,
-            });
-            const text = cannedJsonForPrompt(prompt);
-            return {
-              model: params.model,
-              stop_reason: "end_turn",
-              content: [{ type: "text", text }],
-            };
-          },
-        },
-      };
-    }
-  }
+// The AI SDK's generateText is the whole provider surface now — one mock
+// replaces the two adapter SDK mocks this file used to carry. `tool`, `Output`
+// and the error classes stay real so the route's own wiring is still exercised.
+vi.mock("ai", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai")>();
   return {
-    default: MockAnthropic,
-    AuthenticationError,
-    RateLimitError,
-    APIError,
-    APIUserAbortError,
+    ...actual,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    generateText: async (params: any) => {
+      const prompt = String(params.prompt);
+      promptHistory.push(prompt);
+      const model = params.model?.modelId ?? String(params.model);
+      sdkCalls.push({
+        prompt,
+        model,
+        toolNames: Object.keys(params.tools ?? {}),
+        maxOutputTokens: params.maxOutputTokens,
+        providerOptions: params.providerOptions,
+      });
+      const text = cannedJsonForPrompt(prompt);
+      return {
+        output: JSON.parse(text),
+        text,
+        response: { modelId: model },
+      };
+    },
   };
 });
 
@@ -129,7 +112,8 @@ describe("/api/research orchestrator", () => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-anthropic-key": "sk-test",
+        "x-openrouter-key": "sk-or-v1-test",
+        "x-search-key": "exa-test",
       },
       body: JSON.stringify({ name: "Stripe", domain: null }),
     });
@@ -145,7 +129,7 @@ describe("/api/research orchestrator", () => {
     expect(types).toContain("done");
 
     // exa_usage event emitted right before done, carries the aggregated counter
-    // shape even when no Exa calls happened (Anthropic native search path).
+    // shape even when the model never called the search tool.
     const exaUsageEvent = events.find((e) => e.event === "exa_usage");
     expect(exaUsageEvent).toBeDefined();
     const usagePayload = exaUsageEvent!.data as Record<string, unknown>;
@@ -192,7 +176,7 @@ describe("/api/research orchestrator", () => {
 
     const disambigCalls = sdkCalls.filter((c) => c.prompt.includes("canonical_name"));
     expect(disambigCalls.length).toBe(1);
-    expect(disambigCalls[0].model).toBe("claude-haiku-4-5");
+    expect(disambigCalls[0].model).toBe("google/gemini-3.1-flash-lite");
 
     // Schema-in-prompt: every section call carries the JSON schema, an example,
     // and the canonical one_line_description from disambiguation.
@@ -209,26 +193,66 @@ describe("/api/research orchestrator", () => {
 
     expect(moatCalls.length).toBeGreaterThan(0);
     for (const call of moatCalls) {
-      expect(call.model).toBe("claude-opus-4-7");
-      expect(call.maxTokens).toBe(16384);
-      const ws = call.tools.find((t) => t.name === "web_search");
-      expect(ws?.type).toBe("web_search_20260209");
-      expect(call.betas).toEqual(["code-execution-web-tools-2026-02-09"]);
+      expect(call.model).toBe("deepseek/deepseek-v4-pro");
+      expect(call.maxOutputTokens).toBe(16384);
+      expect(call.toolNames).toEqual(["web_search"]);
+      expect(call.providerOptions?.openrouter?.reasoning?.enabled).toBe(true);
     }
 
     expect(nonMoatCalls.length).toBe(6);
     for (const call of nonMoatCalls) {
-      expect(call.model).toBe("claude-haiku-4-5");
-      expect(call.maxTokens).toBe(8192);
-      const ws = call.tools.find((t) => t.name === "web_search");
-      expect(ws?.type).toBe("web_search_20250305");
-      expect(call.betas).toBeUndefined();
+      expect(call.model).toBe("google/gemini-3.1-flash-lite");
+      expect(call.maxOutputTokens).toBe(8192);
+      expect(call.toolNames).toEqual(["web_search"]);
+      expect(call.providerOptions).toBeUndefined();
     }
   });
 
-  it("uses ANTHROPIC_API_KEY env fallback when no x-anthropic-key header", async () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    process.env.ANTHROPIC_API_KEY = "sk-env-test";
+  // MOCK_RESEARCH short-circuits before auth, key selection and the provider,
+  // so frontend work never needs a key. It has to survive the provider swap.
+  it("still serves a full mock run under MOCK_RESEARCH=true with no keys at all", async () => {
+    const savedMock = process.env.MOCK_RESEARCH;
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    const savedExa = process.env.EXA_API_KEY;
+    process.env.MOCK_RESEARCH = "true";
+    delete process.env.OPENROUTER_API_KEY;
+    delete process.env.EXA_API_KEY;
+    try {
+      // The only mock fixture is the Anthropic company report — the name has
+      // to match it or the mock stream answers with an error frame.
+      const req = new Request("http://localhost/api/research", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "Anthropic", domain: null }),
+      });
+      const res = await POST(req);
+      expect(res.status).toBe(200);
+      expect(res.headers.get("Content-Type")).toContain("text/event-stream");
+
+      const events = await readEvents(res);
+      const types = events.map((e) => e.event);
+      expect(types[0]).toBe("company");
+      expect(types).toContain("disambiguated");
+      expect(types).toContain("done");
+      const completed = events
+        .filter((e) => e.event === "section_completed")
+        .map((e) => (e.data as { section_key: string }).section_key);
+      expect(new Set(completed).size).toBe(7);
+      // No provider call was made — the mock stream never touches generateText.
+      expect(sdkCalls.length).toBe(0);
+    } finally {
+      if (savedMock === undefined) delete process.env.MOCK_RESEARCH;
+      else process.env.MOCK_RESEARCH = savedMock;
+      if (savedKey !== undefined) process.env.OPENROUTER_API_KEY = savedKey;
+      if (savedExa !== undefined) process.env.EXA_API_KEY = savedExa;
+    }
+  });
+
+  it("uses OPENROUTER_API_KEY / EXA_API_KEY env fallback when no key headers are sent", async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
+    const savedExa = process.env.EXA_API_KEY;
+    process.env.OPENROUTER_API_KEY = "sk-or-v1-env-test";
+    process.env.EXA_API_KEY = "exa-env-test";
     try {
       const req = new Request("http://localhost/api/research", {
         method: "POST",
@@ -238,14 +262,16 @@ describe("/api/research orchestrator", () => {
       const res = await POST(req);
       expect(res.status).toBe(200);
     } finally {
-      if (saved === undefined) delete process.env.ANTHROPIC_API_KEY;
-      else process.env.ANTHROPIC_API_KEY = saved;
+      if (savedKey === undefined) delete process.env.OPENROUTER_API_KEY;
+      else process.env.OPENROUTER_API_KEY = savedKey;
+      if (savedExa === undefined) delete process.env.EXA_API_KEY;
+      else process.env.EXA_API_KEY = savedExa;
     }
   });
 
-  it("returns 401 when neither x-anthropic-key header nor ANTHROPIC_API_KEY env is set", async () => {
-    const saved = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
+  it("returns 401 when neither x-openrouter-key header nor OPENROUTER_API_KEY env is set", async () => {
+    const saved = process.env.OPENROUTER_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     try {
       const req = new Request("http://localhost/api/research", {
         method: "POST",
@@ -257,23 +283,24 @@ describe("/api/research orchestrator", () => {
       const body = await res.json();
       expect(body.error).toBe("missing_api_key");
     } finally {
-      if (saved !== undefined) process.env.ANTHROPIC_API_KEY = saved;
+      if (saved !== undefined) process.env.OPENROUTER_API_KEY = saved;
     }
   });
 
-  it("returns 400 missing_search_key when only Kimi key is provided", async () => {
-    const savedAnthropic = process.env.ANTHROPIC_API_KEY;
-    const savedKimi = process.env.KIMI_API_KEY;
+  // Search is required, not optional: no model in the map has a native
+  // web-search tool, so an OpenRouter key alone would produce an ungrounded
+  // report. Same 400 contract the Kimi-without-EXA case used to return.
+  it("returns 400 missing_search_key when only an OpenRouter key is provided", async () => {
+    const savedKey = process.env.OPENROUTER_API_KEY;
     const savedExa = process.env.EXA_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.KIMI_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     delete process.env.EXA_API_KEY;
     try {
       const req = new Request("http://localhost/api/research", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-kimi-key": "km-test",
+          "x-openrouter-key": "sk-or-v1-test",
         },
         body: JSON.stringify({ name: "Stripe", domain: null }),
       });
@@ -282,8 +309,7 @@ describe("/api/research orchestrator", () => {
       const body = await res.json();
       expect(body.error).toBe("missing_search_key");
     } finally {
-      if (savedAnthropic !== undefined) process.env.ANTHROPIC_API_KEY = savedAnthropic;
-      if (savedKimi !== undefined) process.env.KIMI_API_KEY = savedKimi;
+      if (savedKey !== undefined) process.env.OPENROUTER_API_KEY = savedKey;
       if (savedExa !== undefined) process.env.EXA_API_KEY = savedExa;
     }
   });
@@ -443,7 +469,14 @@ function cannedJsonForPrompt(prompt: string): string {
           full_bio: "Founder of Stripe. Earlier sold Auctomatic.",
         },
       ],
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("Research the tech stack")) {
@@ -462,7 +495,14 @@ function cannedJsonForPrompt(prompt: string): string {
         methodology: "2 founders × 6mo × SF salary band.",
       },
       stack_evolution: "Migrated from Heroku to AWS at scale.",
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("funding history")) {
@@ -479,7 +519,14 @@ function cannedJsonForPrompt(prompt: string): string {
       ],
       total_raised_usd: 2000000,
       milestones: [{ date: "2011-09", label: "Public launch", kind: "product" }],
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("traction signals")) {
@@ -489,7 +536,14 @@ function cannedJsonForPrompt(prompt: string): string {
       web_traffic_trend: "unknown",
       web_traffic_note: "n/a",
       other_signals: [],
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   if (prompt.includes("market and competitive landscape")) {
@@ -506,7 +560,14 @@ function cannedJsonForPrompt(prompt: string): string {
         { name: "Braintree", domain: "braintreepayments.com", positioning: "PayPal-owned." },
       ],
       category_growth_rate: "~15% CAGR",
-      claims: [],
+      claims: [
+        {
+          id: 1,
+          text: "Placeholder grounded claim so the section is not empty.",
+          citation_url: "https://valid.example.com/fact",
+          citation_quote: "A supporting passage.",
+        },
+      ],
     });
   }
   return "{}";

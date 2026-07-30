@@ -85,7 +85,7 @@ describe("/api/research cacheKey threading", () => {
   it("passes founderscope:disambiguate for the disambig call and founderscope:section:<key> for each section", async () => {
     const req = new Request("http://localhost/api/research", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-anthropic-key": "sk-test" },
+      headers: { "Content-Type": "application/json", "x-openrouter-key": "sk-or-v1-test", "x-search-key": "exa-test" },
       body: JSON.stringify({ name: "Stripe", domain: null }),
     });
     const res = await POST(req);
