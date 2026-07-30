@@ -44,10 +44,17 @@ export async function POST(request: Request) {
     search: request.headers.get("x-search-key"),
     searchProvider: request.headers.get("x-search-provider"),
   };
+  // The provider is only honoured when the key came with it on the same
+  // request. Resolving them independently let a caller send
+  // `x-search-provider: tavily` with no `x-search-key`, which fell back to the
+  // operator's own EXA key and then handed it to Tavily — a credential the
+  // operator never chose to share with that vendor. A key and the backend it
+  // authenticates against travel together or not at all.
+  const usingServerSearchKey = headerKeys.search === null;
   const keys: Keys = {
     openrouter: headerKeys.openrouter ?? process.env.OPENROUTER_API_KEY ?? null,
     search: headerKeys.search ?? process.env.EXA_API_KEY ?? null,
-    searchProvider: headerKeys.searchProvider,
+    searchProvider: usingServerSearchKey ? null : headerKeys.searchProvider,
   };
 
   let body: z.infer<typeof bodySchema>;

@@ -166,6 +166,7 @@ export default function SettingsPage() {
                 <KeyField
                   key={field.storageKey}
                   field={field}
+                  ready={hydrated}
                   value={keys[field.storageKey] ?? ""}
                   onChange={(v) =>
                     setKeys((s) => ({ ...s, [field.storageKey]: v }))
@@ -198,12 +199,20 @@ export default function SettingsPage() {
 
 function KeyField({
   field,
+  ready,
   value,
   onChange,
   onSave,
   onClear,
 }: {
   field: FieldDef;
+  /**
+   * False until the auth round trip that fills `userId` has resolved. Saving
+   * before then writes to the shared signed-out `legacy:` namespace rather than
+   * `fs:<user-id>:`, and the next account to sign in on this browser adopts the
+   * key on migration.
+   */
+  ready: boolean;
   value: string;
   onChange: (v: string) => void;
   onSave: (v: string) => void;
@@ -253,7 +262,7 @@ function KeyField({
         </div>
         <Button
           onClick={() => onSave(trimmed)}
-          disabled={!dirty || !valid}
+          disabled={!ready || !dirty || !valid}
           size="sm"
         >
           Save
