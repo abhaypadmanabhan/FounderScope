@@ -169,12 +169,11 @@ describe("EXA provider source fallback", () => {
     expect(usage.fallbackHits).toBe(1);
   });
 
-  it("preserves non-domain options while replacing includeDomains", () => {
+  it("preserves non-domain options while replacing includeDomains when none were set", () => {
     expect(
       sourceFallback({
         query: "acme",
         numResults: 7,
-        includeDomains: ["example.com"],
       }),
     ).toMatchObject({
       query: "acme",
@@ -187,6 +186,19 @@ describe("EXA provider source fallback", () => {
         "sec.gov",
         "crunchbase.com",
       ],
+    });
+  });
+
+  it("drops includeDomains on retry when the primary already had an allowlist", () => {
+    expect(
+      sourceFallback({
+        query: "acme",
+        numResults: 7,
+        includeDomains: ["crunchbase.com"],
+      }),
+    ).toEqual({
+      query: "acme",
+      numResults: 7,
     });
   });
 });

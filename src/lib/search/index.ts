@@ -8,6 +8,8 @@ export {
   mergeSearchUsage,
 } from "./budget";
 export { exaCompanyLogo } from "./exa-client";
+export { SearchHttpError } from "./http";
+export { findCompanyLogo } from "./logo";
 export { createSearchProvider } from "./provider";
 export {
   FALLBACK_DOMAINS,

@@ -29,6 +29,7 @@ describe("disambiguateCompany — graceful fallback", () => {
       canonical_domain: "bolt.com",
       one_line_description: "Checkout platform.",
       disambiguation_note: null,
+      maturity: "early-stage" as const,
     };
     (runResearchCall as ReturnType<typeof vi.fn>).mockResolvedValue({ data });
     const result = await disambiguateCompany({ config, name: "Bolt", domain: "bolt.com" });
@@ -45,6 +46,7 @@ describe("disambiguateCompany — graceful fallback", () => {
       canonical_domain: "acme.io",
       one_line_description: "",
       disambiguation_note: null,
+      maturity: "early-stage",
     });
   });
 

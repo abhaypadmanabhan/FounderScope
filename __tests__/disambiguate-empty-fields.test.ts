@@ -74,6 +74,7 @@ describe("normalizeDisambiguation", () => {
       canonical_domain: "linear.app",
       one_line_description: "Issue tracking for software teams.",
       disambiguation_note: "Not Linear Labs.",
+      maturity: "early-stage",
     });
   });
 
@@ -192,6 +193,7 @@ describe("disambiguateCompany", () => {
       canonical_domain: "",
       one_line_description: "",
       disambiguation_note: null,
+      maturity: "early-stage",
     });
     // Distinguishable only here. Two error lines for the failure path now:
     // the search-backed attempt, then the no-tools retry.
@@ -238,6 +240,7 @@ describe("disambiguateCompany", () => {
       canonical_domain: "",
       one_line_description: "",
       disambiguation_note: null,
+      maturity: "early-stage",
     });
     expect(error).toHaveBeenCalledWith(
       expect.stringContaining("both attempts failed"),

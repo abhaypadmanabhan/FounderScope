@@ -3,6 +3,10 @@
 // different real-world entities for ambiguous names ("Bolt" → mobility vs
 // Bolt.new vs Bolt Financial).
 import { z } from "zod";
+import {
+  DEFAULT_MATURITY,
+  type CompanyMaturity,
+} from "@/lib/search/domains";
 import { runResearchCall, type ProviderConfig } from "./llm";
 
 // Deliberately permissive on emptiness. A `.min(1)` here would turn a model
@@ -14,6 +18,10 @@ export const DisambiguationSchema = z.object({
   canonical_domain: z.string().trim(),
   one_line_description: z.string().trim(),
   disambiguation_note: z.string().nullable(),
+  maturity: z
+    .enum(["early-stage", "enterprise"])
+    .optional()
+    .default(DEFAULT_MATURITY),
 });
 export type Disambiguation = z.infer<typeof DisambiguationSchema>;
 
@@ -44,6 +52,7 @@ STRICT OUTPUT RULES:
 - canonical_domain: primary domain only (e.g. "bolt.com"). No protocol, no path, no www.
 - one_line_description: <= 20 words describing what the company does.
 - disambiguation_note: if other notable companies share this name and you ruled them out, list them in one sentence (e.g. "Not the Estonian mobility platform Bolt or Bolt Financial."). Otherwise null.
+- maturity: "early-stage" for a private startup or growth-stage company (typically pre-IPO, under ~1000 employees, VC-backed or bootstrapped). "enterprise" for a large public company, Fortune 500, or established multinational with SEC filings or a stock ticker.
 
 JSON SCHEMA:
 \`\`\`json
@@ -53,7 +62,8 @@ JSON SCHEMA:
     "canonical_name": { "type": "string" },
     "canonical_domain": { "type": "string" },
     "one_line_description": { "type": "string" },
-    "disambiguation_note": { "type": ["string", "null"] }
+    "disambiguation_note": { "type": ["string", "null"] },
+    "maturity": { "type": "string", "enum": ["early-stage", "enterprise"] }
   },
   "required": ["canonical_name", "canonical_domain", "one_line_description", "disambiguation_note"]
 }
@@ -65,7 +75,8 @@ EXAMPLE OUTPUT:
   "canonical_name": "Bolt Financial Inc.",
   "canonical_domain": "bolt.com",
   "one_line_description": "One-click checkout and identity platform for online retailers.",
-  "disambiguation_note": "Not the Estonian mobility platform Bolt (bolt.eu) or the AI codegen tool Bolt.new (bolt.new)."
+  "disambiguation_note": "Not the Estonian mobility platform Bolt (bolt.eu) or the AI codegen tool Bolt.new (bolt.new).",
+  "maturity": "early-stage"
 }
 \`\`\`
 
@@ -79,6 +90,7 @@ Begin researching now using web_search. When done, output JSON only.`;
     canonical_domain: opts.domain ?? "",
     one_line_description: "",
     disambiguation_note: null,
+    maturity: DEFAULT_MATURITY,
   };
 
   try {
@@ -141,7 +153,13 @@ Begin researching now using web_search. When done, output JSON only.`;
  * vague one.
  */
 export function normalizeDisambiguation(
-  data: Disambiguation,
+  data: {
+    canonical_name: string;
+    canonical_domain: string;
+    one_line_description: string;
+    disambiguation_note: string | null;
+    maturity?: CompanyMaturity;
+  },
   inputName: string,
   inputDomain: string | null,
 ): Disambiguation {
@@ -150,6 +168,7 @@ export function normalizeDisambiguation(
     canonical_domain: data.canonical_domain.trim() || (inputDomain ?? ""),
     one_line_description: data.one_line_description.trim(),
     disambiguation_note: data.disambiguation_note?.trim() || null,
+    maturity: normalizeMaturity(data.maturity),
   };
 
   const blank = (
@@ -164,4 +183,8 @@ export function normalizeDisambiguation(
   }
 
   return normalized;
+}
+
+function normalizeMaturity(value: CompanyMaturity | undefined): CompanyMaturity {
+  return value === "enterprise" ? "enterprise" : DEFAULT_MATURITY;
 }

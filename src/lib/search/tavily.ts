@@ -4,16 +4,14 @@ import type { RawSearchProvider, SearchResult } from "./types";
 
 const TAVILY_ENDPOINT = "https://api.tavily.com/search";
 
+const tavilyResultSchema = z.object({
+  title: z.string().nullish(),
+  url: z.string().nullish(),
+  content: z.string().nullish(),
+});
+
 const tavilyResponseSchema = z.object({
-  results: z
-    .array(
-      z.object({
-        title: z.string().optional(),
-        url: z.string().optional(),
-        content: z.string().optional(),
-      }),
-    )
-    .optional(),
+  results: z.array(tavilyResultSchema.nullish()).nullish(),
 });
 
 export function createTavilyProvider(apiKey: string): RawSearchProvider {
@@ -46,11 +44,17 @@ export function createTavilyProvider(apiKey: string): RawSearchProvider {
       if (!response.ok) throw await responseError("TAVILY", response);
 
       const parsed = tavilyResponseSchema.parse(await response.json());
-      return (parsed.results ?? []).map((result) => ({
-        title: result.title ?? "",
-        url: result.url ?? "",
-        highlights: result.content ? [result.content] : [],
-      }));
+      return (parsed.results ?? [])
+        .filter(
+          (result): result is z.infer<typeof tavilyResultSchema> =>
+            result != null,
+        )
+        .map((result) => ({
+          title: result.title ?? "",
+          url: result.url ?? "",
+          highlights: result.content ? [result.content] : [],
+        }))
+        .filter((result) => result.url !== "");
     },
   };
 }

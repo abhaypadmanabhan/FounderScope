@@ -6,10 +6,7 @@ import {
   type SearchResponse,
 } from "./cache";
 import { toSearchRequest, type SearchRequest } from "./request";
-import {
-  sourceFallback,
-  SOURCE_FALLBACK_THRESHOLD,
-} from "./source-fallback";
+import { fallbackThresholdFor, sourceFallback } from "./source-fallback";
 import {
   isSearchRateLimitError,
   withSearchRetry,
@@ -66,9 +63,15 @@ export function withSearchPolicy(
         return cached.results;
       }
 
+      // NOTE: the primary debit above happens before the cache read, so a cache
+      // hit still costs a slot. That asymmetry with the fallback debit below is
+      // real and is recorded in tasks/todo.md as a deliberately deferred product
+      // decision — the cap currently means "searches attempted", not "searches
+      // billed". Changing it is a product call, not a cleanup, and two tests
+      // encode the current contract on purpose.
       try {
         let results = await runLive(backend, primary, opts);
-        if (results.length < SOURCE_FALLBACK_THRESHOLD) {
+        if (results.length < fallbackThresholdFor(primary)) {
           results = await mergeSourceFallback(backend, primary, results, opts);
         }
 
@@ -112,6 +115,13 @@ async function mergeSourceFallback(
     if (opts.usage) opts.usage.cacheHits++;
   } else {
     try {
+      // The fallback is a second live, billed search. It used to run undebited,
+      // so a section could bill twice its advertised cap. Grounding makes that
+      // routine rather than rare: a per-section allowlist narrows results, so
+      // `length < SOURCE_FALLBACK_THRESHOLD` now holds on most sections instead
+      // of occasionally. Debiting here means an exhausted budget throws, the
+      // catch below degrades to the primary results, and the cap is real.
+      consumeSearchBudget(backend.id, opts.budget);
       fallbackResults = await runLive(backend, fallback, opts);
       await writeSearchCache(fallbackKey, fallback.query, {
         results: fallbackResults,

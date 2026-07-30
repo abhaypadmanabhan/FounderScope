@@ -1,7 +1,8 @@
 // Company row resolution: find existing by slug, otherwise insert with collision handling.
 import { supabaseAdmin as supabase } from "./supabase/admin";
 import { resolveCollisionSlug, slugify } from "./slug";
-import { exaCompanyLogo } from "./search";
+import { createSearchBudget, createSearchUsage } from "./search";
+import { findCompanyLogo } from "./search/logo";
 
 export type CompanyRow = {
   id: string;
@@ -78,10 +79,21 @@ async function fetchLogoSilently(
   name: string,
   domain: string | null,
 ): Promise<string | null> {
-  const key = process.env.EXA_API_KEY;
-  if (!key) return null;
+  const providerId = process.env.SEARCH_PROVIDER ?? "exa";
+  // Only EXA's key is forwarded, because only EXA can return a real logo image.
+  // A Firecrawl or Tavily user falls through to the free favicon path rather
+  // than spending one of their search slots on something derivable offline.
+  const exaApiKey = providerId === "exa" ? process.env.EXA_API_KEY : null;
+
   try {
-    return await exaCompanyLogo({ name, domain }, key);
+    return await findCompanyLogo(
+      { name, domain },
+      {
+        exaApiKey,
+        budget: createSearchBudget("default"),
+        usage: createSearchUsage(),
+      },
+    );
   } catch {
     return null;
   }

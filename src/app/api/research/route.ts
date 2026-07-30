@@ -25,6 +25,10 @@ import {
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
+import {
+  allowlistForSection,
+  type CompanyMaturity,
+} from "@/lib/search/domains";
 import { cookies } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -161,6 +165,7 @@ export async function POST(request: Request) {
           canonical_domain: disambig.canonical_domain,
           one_line_description: disambig.one_line_description,
           disambiguation_note: disambig.disambiguation_note,
+          maturity: disambig.maturity,
         });
 
         // Not awaited: neither write feeds companyInput, and awaiting them put
@@ -208,7 +213,17 @@ export async function POST(request: Request) {
         };
 
         const tasks = SECTIONS.map((section) =>
-          runOneSection({ config, section, companyInput, companyId: company.id, send, abort, force: body.force, totals })
+          runOneSection({
+            config,
+            section,
+            companyInput,
+            companyId: company.id,
+            maturity: disambig.maturity,
+            send,
+            abort,
+            force: body.force,
+            totals,
+          }),
         );
         await Promise.allSettled(tasks);
         await touchLastRefreshed(company.id).catch(() => undefined);
@@ -257,6 +272,7 @@ type RunSectionArgs = {
   section: SectionDefinition<any>;
   companyInput: CompanyInput;
   companyId: string;
+  maturity: CompanyMaturity;
   send: (event: string, payload: unknown) => void;
   abort: AbortController;
   force: boolean;
@@ -264,7 +280,17 @@ type RunSectionArgs = {
 };
 
 async function runOneSection(args: RunSectionArgs) {
-  const { config, section, companyInput, companyId, send, abort, force, totals } = args;
+  const {
+    config,
+    section,
+    companyInput,
+    companyId,
+    maturity,
+    send,
+    abort,
+    force,
+    totals,
+  } = args;
   const sectionKey = section.key;
   send("section_started", { section_key: sectionKey });
 
@@ -288,10 +314,14 @@ async function runOneSection(args: RunSectionArgs) {
     if (abort.signal.aborted) return;
 
     const basePrompt = section.buildPrompt(companyInput);
+    const includeDomains = [
+      ...allowlistForSection(sectionKey, maturity, companyInput.domain),
+    ];
     const result = await callAndValidate({
       config,
       section,
       prompt: basePrompt,
+      includeDomains,
     });
 
     if (result.usage) mergeSearchUsage(totals.usage, result.usage);
@@ -338,16 +368,18 @@ type CallAndValidateArgs = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   section: SectionDefinition<any>;
   prompt: string;
+  includeDomains: string[];
 };
 
 async function callAndValidate(args: CallAndValidateArgs) {
-  const { config, section, prompt } = args;
+  const { config, section, prompt, includeDomains } = args;
   const result = await runResearchCall({
     config,
     tier: section.tier,
     prompt,
     schema: section.outputSchema,
     cacheKey: section.cacheKey,
+    includeDomains,
   });
 
   const rawCitations = extractCitations(result.data);
