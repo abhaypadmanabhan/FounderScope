@@ -56,9 +56,11 @@ function faviconFor(domain: string): string | null {
  *
  * Two paths, deliberately asymmetric:
  *
- *   EXA configured — use EXA's own logo lookup, which returns a real image. One
- *   API call, debited against the search budget and counted in usage. That
- *   accounting is what the original path skipped.
+ *   EXA configured AND a caller-owned budget supplied — use EXA's own logo
+ *   lookup, which returns a real image. One API call, debited against that
+ *   budget and counted in usage. That accounting is what the original path
+ *   skipped. Production supplies a `logo`-tier budget with a ceiling of 1, so a
+ *   request can buy at most one logo.
  *
  *   Anything else — derive the domain's favicon locally. No network, no search
  *   slot. This is what fixes the actual defect: a Firecrawl or Tavily user
@@ -76,15 +78,15 @@ export async function findCompanyLogo(
   input: FindCompanyLogoInput,
   opts: FindCompanyLogoOptions = {},
 ): Promise<string | null> {
-  if (opts.exaApiKey) {
+  // A key alone is not authorization to spend. The paid branch requires a budget
+  // the caller owns, so "no owned budget, no paid call" is structural rather than
+  // a convention a future caller can forget: a caller that passes only a key
+  // fails closed to the free path instead of making an uncapped request.
+  // Manufacturing a budget here would be theatre — a fresh one can never be
+  // exhausted and its counters are discarded on return.
+  if (opts.exaApiKey && opts.budget) {
     try {
-      // Only debit a budget the caller actually owns. Manufacturing one here
-      // would be theatre: a fresh 8-slot budget can never be exhausted, and its
-      // counters are discarded on return, so the accounting would look real and
-      // measure nothing. Today's only caller (company insert) has no
-      // request-scoped budget to give, so the logo call is genuinely untracked —
-      // recorded in tasks/todo.md rather than papered over here.
-      if (opts.budget) consumeSearchBudget("exa", opts.budget);
+      consumeSearchBudget("exa", opts.budget);
       const logo = await exaCompanyLogo(input, opts.exaApiKey);
       if (opts.usage) opts.usage.calls++;
       if (logo) return logo;

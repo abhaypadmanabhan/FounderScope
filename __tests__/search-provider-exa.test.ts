@@ -221,7 +221,10 @@ describe("EXA retry", () => {
 
 describe("search budget", () => {
   it("keeps the existing default and reasoning caps", () => {
-    expect(SEARCH_BUDGET).toEqual({ default: 8, reasoning: 10 });
+    // `logo` is the request-scoped tier for the company-insert logo lookup,
+    // which runs outside every model call and so has no per-call budget to
+    // draw from. Its ceiling is 1 because a request inserts at most one row.
+    expect(SEARCH_BUDGET).toEqual({ default: 8, reasoning: 10, logo: 1 });
   });
 
   it("blocks the ninth default-tier search before cache or network I/O", async () => {

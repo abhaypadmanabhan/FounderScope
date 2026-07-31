@@ -18,6 +18,7 @@ import {
   type Keys,
 } from "@/lib/llm";
 import {
+  createSearchBudget,
   createSearchUsage,
   mergeSearchUsage,
   type SearchUsage,
@@ -130,10 +131,17 @@ export async function POST(request: Request) {
     citedClaims: 0,
   };
 
+  // The one budget in the system that is request-scoped rather than per model
+  // call, because the logo lookup runs outside every model call. Ceiling 1: a
+  // request inserts at most one company row, so a second lookup would mean the
+  // call path changed, and the budget should say so instead of paying for it.
+  const logoBudget = createSearchBudget("logo");
+
   const company = await findOrCreateCompany(
     body.name,
     body.domain ?? null,
     totals.usage,
+    logoBudget,
   );
 
   const stream = new ReadableStream<Uint8Array>({

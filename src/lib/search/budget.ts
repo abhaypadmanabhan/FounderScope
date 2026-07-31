@@ -10,6 +10,10 @@ export const SEARCH_BUDGET_EXHAUSTED_INSTRUCTION =
 export const SEARCH_BUDGET: Readonly<Record<SearchBudget["tier"], number>> = {
   default: 8,
   reasoning: 10,
+  // One paid logo lookup per request, enforced rather than assumed. A request
+  // inserts at most one company row, so 1 is the real ceiling — writing 8 here
+  // would restore the accounting theatre this tier exists to remove.
+  logo: 1,
 };
 
 export function createSearchBudget(
