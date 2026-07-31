@@ -221,6 +221,7 @@ async function doCall<T>(
                     budget,
                     usage,
                     trace,
+                    args.includeDomains,
                   ),
               }),
             },
@@ -513,6 +514,7 @@ async function runSearchTool(
   budget: ReturnType<typeof createSearchBudget>,
   usage: SearchUsage,
   trace: ToolTrace,
+  includeDomains: string[] | undefined,
 ): Promise<string> {
   trace.attempts++;
   const trimmedQuery = query.trim();
@@ -530,6 +532,7 @@ async function runSearchTool(
       numResults: clampResults(numResults),
       budget,
       usage,
+      includeDomains,
     });
     // Every section prompt was tuned against an object with a `results` key.
     // A bare array is a different contract.

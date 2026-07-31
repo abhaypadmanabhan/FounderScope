@@ -4,21 +4,21 @@ import type { RawSearchProvider, SearchResult } from "./types";
 
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v2/search";
 
+// Firecrawl v2 search body uses camelCase domain filters; verified against
+// https://docs.firecrawl.dev/api-reference/search (2026-07-30).
+const firecrawlWebResultSchema = z.object({
+  title: z.string().nullish(),
+  url: z.string().nullish(),
+  description: z.string().nullish(),
+  markdown: z.string().nullish(),
+});
+
 const firecrawlResponseSchema = z.object({
   data: z
     .object({
-      web: z
-        .array(
-          z.object({
-            title: z.string().optional(),
-            url: z.string().optional(),
-            description: z.string().optional(),
-            markdown: z.string().optional(),
-          }),
-        )
-        .optional(),
+      web: z.array(firecrawlWebResultSchema.nullish()).nullish(),
     })
-    .optional(),
+    .nullish(),
 });
 
 export function createFirecrawlProvider(apiKey: string): RawSearchProvider {
@@ -47,13 +47,19 @@ export function createFirecrawlProvider(apiKey: string): RawSearchProvider {
       if (!response.ok) throw await responseError("FIRECRAWL", response);
 
       const parsed = firecrawlResponseSchema.parse(await response.json());
-      return (parsed.data?.web ?? []).map((result) => ({
-        title: result.title ?? "",
-        url: result.url ?? "",
-        highlights: [result.description ?? result.markdown ?? ""].filter(
-          (highlight) => highlight.length > 0,
-        ),
-      }));
+      return (parsed.data?.web ?? [])
+        .filter(
+          (result): result is z.infer<typeof firecrawlWebResultSchema> =>
+            result != null,
+        )
+        .map((result) => ({
+          title: result.title ?? "",
+          url: result.url ?? "",
+          highlights: [result.description ?? result.markdown ?? ""].filter(
+            (highlight) => highlight.length > 0,
+          ),
+        }))
+        .filter((result) => result.url !== "");
     },
   };
 }

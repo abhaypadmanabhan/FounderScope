@@ -18,6 +18,7 @@ import {
   type Keys,
 } from "@/lib/llm";
 import {
+  createSearchBudget,
   createSearchUsage,
   mergeSearchUsage,
   type SearchUsage,
@@ -25,6 +26,10 @@ import {
 import { extractCitations } from "@/lib/sections/shared";
 import { validateCitations, summarizeCitationStatuses, countCitationStatuses } from "@/lib/citations";
 import { disambiguateCompany } from "@/lib/disambiguate";
+import {
+  allowlistForSection,
+  type CompanyMaturity,
+} from "@/lib/search/domains";
 import { cookies } from "next/headers";
 import { supabaseServer } from "@/lib/supabase/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
@@ -117,7 +122,27 @@ export async function POST(request: Request) {
     );
   }
 
-  const company = await findOrCreateCompany(body.name, body.domain ?? null);
+  // Created before the company row, not with the section tasks, because the
+  // insert can itself spend an EXA call on the logo lookup. Declared later, that
+  // call had nowhere to be counted and simply disappeared from exa_usage.
+  const totals: RequestTotals = {
+    usage: createSearchUsage(),
+    totalClaims: 0,
+    citedClaims: 0,
+  };
+
+  // The one budget in the system that is request-scoped rather than per model
+  // call, because the logo lookup runs outside every model call. Ceiling 1: a
+  // request inserts at most one company row, so a second lookup would mean the
+  // call path changed, and the budget should say so instead of paying for it.
+  const logoBudget = createSearchBudget("logo");
+
+  const company = await findOrCreateCompany(
+    body.name,
+    body.domain ?? null,
+    totals.usage,
+    logoBudget,
+  );
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -161,6 +186,7 @@ export async function POST(request: Request) {
           canonical_domain: disambig.canonical_domain,
           one_line_description: disambig.one_line_description,
           disambiguation_note: disambig.disambiguation_note,
+          maturity: disambig.maturity,
         });
 
         // Not awaited: neither write feeds companyInput, and awaiting them put
@@ -201,14 +227,18 @@ export async function POST(request: Request) {
           one_line_description: disambig.one_line_description,
         };
 
-        const totals: RequestTotals = {
-          usage: createSearchUsage(),
-          totalClaims: 0,
-          citedClaims: 0,
-        };
-
         const tasks = SECTIONS.map((section) =>
-          runOneSection({ config, section, companyInput, companyId: company.id, send, abort, force: body.force, totals })
+          runOneSection({
+            config,
+            section,
+            companyInput,
+            companyId: company.id,
+            maturity: disambig.maturity,
+            send,
+            abort,
+            force: body.force,
+            totals,
+          }),
         );
         await Promise.allSettled(tasks);
         await touchLastRefreshed(company.id).catch(() => undefined);
@@ -257,6 +287,7 @@ type RunSectionArgs = {
   section: SectionDefinition<any>;
   companyInput: CompanyInput;
   companyId: string;
+  maturity: CompanyMaturity;
   send: (event: string, payload: unknown) => void;
   abort: AbortController;
   force: boolean;
@@ -264,7 +295,17 @@ type RunSectionArgs = {
 };
 
 async function runOneSection(args: RunSectionArgs) {
-  const { config, section, companyInput, companyId, send, abort, force, totals } = args;
+  const {
+    config,
+    section,
+    companyInput,
+    companyId,
+    maturity,
+    send,
+    abort,
+    force,
+    totals,
+  } = args;
   const sectionKey = section.key;
   send("section_started", { section_key: sectionKey });
 
@@ -288,10 +329,14 @@ async function runOneSection(args: RunSectionArgs) {
     if (abort.signal.aborted) return;
 
     const basePrompt = section.buildPrompt(companyInput);
+    const includeDomains = [
+      ...allowlistForSection(sectionKey, maturity, companyInput.domain),
+    ];
     const result = await callAndValidate({
       config,
       section,
       prompt: basePrompt,
+      includeDomains,
     });
 
     if (result.usage) mergeSearchUsage(totals.usage, result.usage);
@@ -338,16 +383,18 @@ type CallAndValidateArgs = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   section: SectionDefinition<any>;
   prompt: string;
+  includeDomains: string[];
 };
 
 async function callAndValidate(args: CallAndValidateArgs) {
-  const { config, section, prompt } = args;
+  const { config, section, prompt, includeDomains } = args;
   const result = await runResearchCall({
     config,
     tier: section.tier,
     prompt,
     schema: section.outputSchema,
     cacheKey: section.cacheKey,
+    includeDomains,
   });
 
   const rawCitations = extractCitations(result.data);

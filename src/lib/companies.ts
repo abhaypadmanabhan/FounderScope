@@ -1,7 +1,8 @@
 // Company row resolution: find existing by slug, otherwise insert with collision handling.
 import { supabaseAdmin as supabase } from "./supabase/admin";
 import { resolveCollisionSlug, slugify } from "./slug";
-import { exaCompanyLogo } from "./search";
+import { findCompanyLogo } from "./search/logo";
+import type { SearchBudget, SearchUsage } from "./search/types";
 
 export type CompanyRow = {
   id: string;
@@ -22,9 +23,17 @@ export async function getCompanyBySlug(slug: string): Promise<CompanyRow | null>
   return (data ?? null) as CompanyRow | null;
 }
 
+/**
+ * `budget` and `usage` are the caller's request-scoped accounting. An insert can
+ * spend one paid EXA call on the logo lookup; passing both is what makes that
+ * call capped (`logo` tier, ceiling 1) and visible in the request's reported
+ * totals, instead of uncapped and invisible.
+ */
 export async function findOrCreateCompany(
   name: string,
-  domain: string | null
+  domain: string | null,
+  usage?: SearchUsage,
+  budget?: SearchBudget
 ): Promise<CompanyRow> {
   const baseSlug = slugify(name);
 
@@ -37,23 +46,25 @@ export async function findOrCreateCompany(
       const altSlug = resolveCollisionSlug(name, domain);
       const altExisting = await getCompanyBySlug(altSlug);
       if (altExisting) return altExisting;
-      return await insertCompany(altSlug, name, domain);
+      return await insertCompany(altSlug, name, domain, usage, budget);
     }
     return existing;
   }
 
-  return await insertCompany(baseSlug, name, domain);
+  return await insertCompany(baseSlug, name, domain, usage, budget);
 }
 
 async function insertCompany(
   slug: string,
   displayName: string,
-  domain: string | null
+  domain: string | null,
+  usage?: SearchUsage,
+  budget?: SearchBudget
 ): Promise<CompanyRow> {
   const tokens = [slug, displayName.toLowerCase()];
   if (domain) tokens.push(domain.toLowerCase());
 
-  const logoUrl = await fetchLogoSilently(displayName, domain);
+  const logoUrl = await fetchLogoSilently(displayName, domain, usage, budget);
 
   const { data, error } = await supabase
     .from("companies")
@@ -77,11 +88,22 @@ async function insertCompany(
 async function fetchLogoSilently(
   name: string,
   domain: string | null,
+  usage?: SearchUsage,
+  budget?: SearchBudget,
 ): Promise<string | null> {
-  const key = process.env.EXA_API_KEY;
-  if (!key) return null;
+  const providerId = process.env.SEARCH_PROVIDER ?? "exa";
+  // Only EXA's key is forwarded, because only EXA can return a real logo image.
+  // A Firecrawl or Tavily user falls through to the free favicon path rather
+  // than spending one of their search slots on something derivable offline.
+  const exaApiKey = providerId === "exa" ? process.env.EXA_API_KEY : null;
+
   try {
-    return await exaCompanyLogo({ name, domain }, key);
+    // Both come from the caller. Minting them here — a fresh 8-slot budget and a
+    // throwaway usage counter per insert — was accounting theatre: the budget
+    // could never be exhausted and both were discarded on return, which is
+    // exactly what findCompanyLogo's contract says not to do. The request owns
+    // them now, so the `logo` tier's ceiling of 1 is a cap that actually binds.
+    return await findCompanyLogo({ name, domain }, { exaApiKey, usage, budget });
   } catch {
     return null;
   }

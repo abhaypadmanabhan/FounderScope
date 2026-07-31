@@ -44,6 +44,11 @@ export interface RunArgs<T> {
    * Format: "founderscope:section:<sectionKey>" or "founderscope:disambiguate".
    */
   cacheKey?: string;
+  /**
+   * Section allowlist forwarded to web_search. Omitted for disambiguation and any
+   * call that should search the open web.
+   */
+  includeDomains?: string[];
 }
 
 export interface RunResult<T> {

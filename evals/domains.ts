@@ -1,38 +1,49 @@
+import {
+  EARLY_STAGE_DOMAINS as PRODUCT_EARLY_STAGE_DOMAINS,
+  ENTERPRISE_DOMAINS as PRODUCT_ENTERPRISE_DOMAINS,
+  TECH_STACK_DOMAINS as PRODUCT_TECH_STACK_DOMAINS,
+} from "@/lib/search/domains";
 import type { CompanyMaturity } from "./types";
 
 /**
- * Section domain allowlists per design spec D5.
- * Mirrors the planned src/lib/search/domains.ts wiring (C1); kept in evals/
- * so scorers are self-contained until that lands.
+ * Scoring-side view of the section allowlists (design spec D5).
+ *
+ * The shared entries are imported from `@/lib/search/domains`, which is what the
+ * product actually sends as EXA `includeDomains`. Keeping a second copy here
+ * meant `domain-adherence` graded production against a list production never
+ * sent: edit one and the metric silently measures a stale allowlist, and a wrong
+ * score is the hardest kind of wrong to notice.
+ *
+ * The two are still NOT interchangeable, which is why this file remains.
+ * `includeDomains` accepts only a hostname, a hostname with a path prefix, or a
+ * wildcard subdomain — never a bare path segment. Scoring has no such limit and
+ * genuinely wants the bare patterns below, because production reaches
+ * investor-relations and careers pages via the company's own domain plus
+ * `*.domain`, and a citation to `ir.stripe.com` should still score as
+ * on-allowlist. So the shared entries are imported and the scoring-only ones are
+ * declared explicitly, instead of the divergence being implied by duplication.
  */
-export const EARLY_STAGE_DOMAINS: readonly string[] = [
-  "ycombinator.com/companies",
-  "crunchbase.com",
-  "producthunt.com",
-  "wellfound.com",
-  "sec.gov",
-  "github.com",
-  "linkedin.com/company",
-  "opencorporates.com",
-];
-
-export const ENTERPRISE_DOMAINS: readonly string[] = [
-  "sec.gov/edgar",
-  "annualreports.com",
+const SCORING_ONLY_ENTERPRISE: readonly string[] = [
   "investors.",
   "/investor",
   "/investors",
   "ir.",
-  "find-and-update.company-information.service.gov.uk",
-  "macrotrends.net",
+];
+
+const SCORING_ONLY_TECH_STACK: readonly string[] = ["/careers", "careers."];
+
+export const EARLY_STAGE_DOMAINS: readonly string[] = [
+  ...PRODUCT_EARLY_STAGE_DOMAINS,
+];
+
+export const ENTERPRISE_DOMAINS: readonly string[] = [
+  ...PRODUCT_ENTERPRISE_DOMAINS,
+  ...SCORING_ONLY_ENTERPRISE,
 ];
 
 export const TECH_STACK_DOMAINS: readonly string[] = [
-  "builtwith.com",
-  "stackshare.io",
-  "github.com",
-  "/careers",
-  "careers.",
+  ...PRODUCT_TECH_STACK_DOMAINS,
+  ...SCORING_ONLY_TECH_STACK,
 ];
 
 export function allowlistForSection(

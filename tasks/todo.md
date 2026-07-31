@@ -87,3 +87,8 @@ looks for them deliberately.
 - `fs:<user-id>:` key parsing assumes a colon-free user id (true for Supabase UUIDs).
 - Host allowlist matching can false-positive on `foo.investors.com`.
 - **Phase C1 not started** — per-section `includeDomains` grounding + first eval run.
+- Section search budgets are still per model call, so nothing caps EXA spend
+  across a whole request: six default-tier sections at 8 plus moat at the
+  reasoning tier's 10, so up to 58 searches, plus the 1 the `logo` tier now
+  allows. A request-scoped pool that per-call budgets draw from is the real fix;
+  the `logo` tier is the first budget shaped that way.
