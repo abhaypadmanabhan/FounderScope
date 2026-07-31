@@ -4,7 +4,7 @@
 
 ## What this product is
 
-Open-source company research tool for founders. Type a company name → get a structured 7-section report (snapshot, moat, founders, tech stack, funding, traction, market) with cited sources. Hero feature is moat analysis with a 4-axis "AI-native replicability score." Stack: Next.js 14 + TypeScript + shadcn/ui (base-nova) + Supabase + Anthropic SDK with web search + Recharts.
+Open-source company research tool for founders. Type a company name → get a structured 7-section report (snapshot, moat, founders, tech stack, funding, traction, market) with cited sources. Hero feature is moat analysis with a 4-axis "AI-native replicability score." Stack: Next.js 14 + TypeScript + shadcn/ui (base-nova) + Supabase + OpenRouter via Vercel AI SDK v6 with EXA/Firecrawl/Tavily web search + Recharts.
 
 ## Where we are right now
 

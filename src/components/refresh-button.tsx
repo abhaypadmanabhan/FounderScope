@@ -56,7 +56,7 @@ export function RefreshButton({ companyName, disabled, busy, onConfirm }: Refres
           <DialogHeader>
             <DialogTitle>Re-research {companyName}?</DialogTitle>
             <DialogDescription>
-              This spends ~$1 in Anthropic API costs and overwrites the current cached report.
+              This spends ~$0.15 in OpenRouter API costs and overwrites the current cached report.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

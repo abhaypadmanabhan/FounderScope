@@ -28,7 +28,7 @@ The hero feature is **moat analysis with an AI-native replicability score**: cou
 2. As the user types, a dropdown shows up to 5 fuzzy-matched companies from the global cache, each with a "researched Nd ago" timestamp.
 3. **If user clicks a suggestion, or presses Enter on an exact-name match:** instantly route to the cached report at `/company/{slug}`. No API calls, no research run.
 4. **If user presses Enter on a non-matching query:** kick off a fresh research run, create a new company entry, route to `/company/{new-slug}` which renders skeleton sections that progressively fill as each section's research completes.
-5. On any report page a "Refresh" button (top-right) lets the user force a re-research using their own Anthropic API key. A modal confirms with an estimated cost.
+5. On any report page a "Refresh" button (top-right) lets the user force a re-research using their own OpenRouter API key. A modal confirms with an estimated cost.
 6. The sidebar reflects global state. Clicking a sidebar item routes to that company's cached report.
 
 ## 5. Sections (display order)
@@ -128,7 +128,7 @@ Implementation contract: every section's prompt requires JSON output with a `cla
 - Next.js 14 App Router + TypeScript
 - shadcn/ui + Tailwind
 - Postgres via Supabase (free tier) for shared cache + history
-- Anthropic SDK with web search tool
+- OpenRouter via the Vercel AI SDK v6, with a swappable web-search backend (EXA/Firecrawl/Tavily)
 - Recharts (and Tremor wrappers where they help)
 - Vercel deploy
 
@@ -201,7 +201,7 @@ export const SECTIONS: SectionDefinition[] = [
 ].sort((a, b) => a.order - b.order);
 ```
 
-The orchestrator iterates over `SECTIONS`, fires one Anthropic call per section in parallel, validates each result against its `outputSchema`, persists, and streams the results to the client. The report page does the same iteration to render. To add a new section (say, "Hiring signals"), drop `/lib/sections/hiring.ts` exporting a `SectionDefinition`, add it to `registry.ts`, and ship. The DB needs no migration because `reports.content_json` is jsonb and `section_key` is a text column.
+The orchestrator iterates over `SECTIONS`, fires one OpenRouter call per section in parallel, validates each result against its `outputSchema`, persists, and streams the results to the client. The report page does the same iteration to render. To add a new section (say, "Hiring signals"), drop `/lib/sections/hiring.ts` exporting a `SectionDefinition`, add it to `registry.ts`, and ship. The DB needs no migration because `reports.content_json` is jsonb and `section_key` is a text column.
 
 ### 7.4 Caching rules
 
@@ -212,8 +212,8 @@ The orchestrator iterates over `SECTIONS`, fires one Anthropic call per section 
 
 ### 7.5 API key handling
 
-- User pastes Anthropic key on `/settings`, stored in `localStorage`.
-- Client sends key as a header (`x-anthropic-key`) on research requests.
+- User pastes an OpenRouter key and one search key (EXA, Firecrawl, or Tavily) on `/settings`, stored in `localStorage` scoped per user.
+- Client sends them as headers (`x-openrouter-key`, plus `x-search-key` and `x-search-provider` together) on research requests. A search key and the backend it authenticates against always travel together — never one without the other.
 - Server uses the key only for that request, never persists it.
 - If a company is fully cached, no key is required at all — the open-source flywheel.
 
@@ -256,7 +256,9 @@ The orchestrator iterates over `SECTIONS`, fires one Anthropic call per section 
     funding.ts
     traction.ts
     market.ts
-  /anthropic.ts                       # SDK wrapper, web search enabled
+  /llm/                               # OpenRouter adapter, tier→model map, provider select
+  /search/                            # swappable web-search backends (EXA/Firecrawl/Tavily)
+  /api-keys.ts                        # BYOK localStorage + request headers
   /supabase.ts
   /cache.ts                           # TTL logic, schemaVersion check
   /slug.ts                            # slug generation + collision handling

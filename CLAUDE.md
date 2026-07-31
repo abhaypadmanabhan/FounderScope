@@ -2,7 +2,7 @@
 
 Open-source company research tool for founders. Company name → 7-section report with cited sources. Hero feature: moat analysis with AI-native replicability score.
 
-**Stack:** Next.js 14 App Router, TypeScript, shadcn/ui (base-nova), Tailwind, Supabase, Anthropic SDK + web search, Recharts.
+**Stack:** Next.js 14 App Router, TypeScript, shadcn/ui (base-nova), Tailwind, Supabase, OpenRouter via Vercel AI SDK v6 (Gemini 3.1 Flash Lite + DeepSeek V4 Pro) with EXA/Firecrawl/Tavily web search, Recharts.
 **Status:** Phase 1-2 complete. Phase 3 (frontend) in progress.
 
 ## Reference Docs (read on demand)
@@ -23,14 +23,17 @@ Open-source company research tool for founders. Company name → 7-section repor
 
 ## Cost Awareness
 
-API calls ~$1.00/research. Use `MOCK_RESEARCH=true` for frontend dev. Never hit live API without confirmation.
+API calls ~$0.15/research on the current OpenRouter model map (was ~$1.00 pre-migration — see `docs/superpowers/specs/2026-07-28-openrouter-migration-design.md` §D2). Use `MOCK_RESEARCH=true` for frontend dev. Never hit live API without confirmation.
 
 ## Environment Variables
 
 ```
 NEXT_PUBLIC_SUPABASE_URL      — Supabase project URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY — Supabase anon key
-ANTHROPIC_API_KEY             — Server-side Anthropic key
+SUPABASE_SERVICE_ROLE_KEY     — Server-only admin key
+OPENROUTER_API_KEY            — Server-side fallback OpenRouter key (all inference)
+EXA_API_KEY                   — Server-side fallback search key (required, not optional)
+SEARCH_PROVIDER               — exa | firecrawl | tavily (default: exa)
 MOCK_RESEARCH                 — "true" for fixture data
 ```
 
