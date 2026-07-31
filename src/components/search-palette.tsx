@@ -216,7 +216,7 @@ export function SearchPalette({ open, initialQuery = "", onOpenChange }: Props) 
                       className="text-xs"
                       style={{ color: "var(--text-faint)" }}
                     >
-                      Fresh research · uses your Anthropic API key
+                      Fresh research · uses your OpenRouter key
                     </div>
                   </div>
                 </Command.Item>

@@ -12,8 +12,10 @@ cd founderscope
 npm install
 cp .env.local.example .env.local
 # Fill in SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in .env.local
-# Optional: set ANTHROPIC_API_KEY for local dev / self-hosting so the
-# server uses it as a fallback. Leave unset for BYOK public deployments.
+# Optional: set OPENROUTER_API_KEY and EXA_API_KEY for local dev /
+# self-hosting so the server uses them as fallbacks. Both are needed —
+# inference routes through OpenRouter and web search is required, not
+# optional. Leave unset for BYOK public deployments.
 # Run the migration against your Supabase project:
 # Option A: supabase db push  (if using Supabase CLI)
 # Option B: paste supabase/migrations/0001_init.sql into the Supabase SQL editor

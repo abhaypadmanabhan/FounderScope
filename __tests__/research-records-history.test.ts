@@ -50,7 +50,11 @@ vi.mock("@/lib/llm", async () => {
     ...actual,
     selectProvider: () => ({
       ok: true,
-      config: { provider: "anthropic", searchBackend: "anthropic" },
+      config: {
+        openrouterKey: "test-openrouter-key",
+        searchKey: "test-search-key",
+        searchProvider: "exa",
+      },
     }),
     runResearchCall: vi
       .fn()

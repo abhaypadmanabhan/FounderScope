@@ -6,23 +6,20 @@ Each research section lives in `src/lib/sections/` and exports a `SectionDefinit
 
 ### 1. Create the section file
 
-Copy this template to `src/lib/sections/your-section.ts`:
+Copy this template to `src/lib/sections/your-section.tsx`:
 
-```typescript
+```tsx
 // Section N — Your Section: one-line description of what it shows.
-"use client";
 import { z } from "zod";
 import React from "react";
 import { Skeleton } from "@/components/ui/skeleton";
-import type { SectionDefinition } from "./types";
+import type { SectionDefinition, RendererProps } from "./types";
 
-import { DEFAULT_MODEL, DEFAULT_WEB_SEARCH } from "./types";
-
-// TODO(phase-2): replace with real output schema matching Claude's JSON output
+// Replace with the real output schema the model must return.
 const outputSchema = z.object({ placeholder: z.string() });
 type Output = z.infer<typeof outputSchema>;
 
-const Renderer: React.FC<{ data: Output; citations: unknown[] }> = ({ data }) => (
+const Renderer: React.FC<RendererProps<Output>> = ({ data }) => (
   React.createElement("div", null, data.placeholder)
 );
 
@@ -36,12 +33,12 @@ const SkeletonRenderer: React.FC = () => (
 
 export const yourSection: SectionDefinition<Output> = {
   key: "your_section",          // stable DB key — never rename after launch
+  cacheKey: "founderscope:section:your_section",  // stable prompt-cache key
   title: "Your Section Title",
   order: 8,                     // must be unique across all sections
   cacheTtlDays: 14,             // how long to cache results (see PRD §5)
   schemaVersion: 1,             // bump when output shape changes incompatibly
-  model: DEFAULT_MODEL,         // see "Model + tool pairing" below
-  webSearchVersion: DEFAULT_WEB_SEARCH,
+  tier: "default",              // "default" | "reasoning" — see "Model tiers" below
   buildPrompt: (company) => `TODO: prompt for ${company.name}`,
   outputSchema,
   Renderer,
@@ -69,24 +66,32 @@ That's it. No DB migration needed — `reports.section_key` is a text column and
 | Field | Description |
 |-------|-------------|
 | `key` | Stable identifier used as `section_key` in the DB. Never rename after the first report is cached. |
+| `cacheKey` | Stable prompt-cache key, `founderscope:section:<key>`. Never rename. |
 | `title` | Display name shown as the section heading. |
 | `order` | Integer display order. Must be unique. |
 | `cacheTtlDays` | How many days before this section's cache expires (see PRD §5 for per-section values). |
 | `schemaVersion` | Bump when `outputSchema` changes incompatibly — old cache rows will be treated as expired. |
-| `buildPrompt` | Returns a prompt instructing Claude to output valid JSON matching `outputSchema`. |
-| `outputSchema` | Zod schema used to validate Claude's JSON output before caching. |
-| `model` | Claude model id used to generate this section. See pairing rule below. |
-| `webSearchVersion` | `web_search_20260209` (dynamic filtering) or `web_search_20250305` (legacy). Must be paired with `model` correctly. |
-| `Renderer` | Receives `{ data: T, citations: Citation[] }` — real validated data. |
+| `buildPrompt` | Returns a prompt instructing the model to output valid JSON matching `outputSchema`. |
+| `outputSchema` | Zod schema used to validate the model's JSON output before caching. |
+| `tier` | `"default"` or `"reasoning"`. See below. Sections never name a model id. |
+| `Renderer` | Receives `{ data: T, citations: Citation[], company, section }` — real validated data. |
 | `SkeletonRenderer` | Shown while loading. No props. |
 
-### Model + web_search tool pairing rule
+### Model tiers
 
-Always pair `model` and `webSearchVersion` from the same family:
+All inference routes through OpenRouter. A section declares a `tier`; the
+tier → model map lives in `src/lib/llm/models.ts` and is the single place a
+model id appears.
 
-- **Reasoning sections** (heavy synthesis, opinionated analysis):
-  `model: REASONING_MODEL` (claude-opus-4-7) + `webSearchVersion: REASONING_WEB_SEARCH` (web_search_20260209). Gets dynamic filtering.
-- **Default sections** (structured extraction, factual recall):
-  `model: DEFAULT_MODEL` (claude-haiku-4-5) + `webSearchVersion: DEFAULT_WEB_SEARCH` (web_search_20250305). Legacy tool, broader model compat, ~3× cheaper than Sonnet.
+- **`reasoning`** — heavy synthesis, opinionated analysis. Currently
+  `deepseek/deepseek-v4-pro`. Used only by `moat`.
+- **`default`** — structured extraction, factual recall. Currently
+  `google/gemini-3.1-flash-lite`. Used by the other six sections and by
+  disambiguation.
 
-Mixing versions across model families requires checking Anthropic's [web search docs](https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool) for current model-tool support. Don't assume; verify. The header comment at the top of `src/lib/sections/types.ts` is the canonical reference for the current pairing.
+Do not hardcode a model id in a section, and do not add a per-section web-search
+setting. There is one `web_search` tool, defined in `src/lib/llm/openrouter.ts`
+and backed by a swappable provider in `src/lib/search/` (EXA, Firecrawl, or
+Tavily). Search is required, not optional — no model in the map ships a built-in
+one. The header comment at the top of `src/lib/sections/types.ts` is the
+canonical reference for the tier rule.
