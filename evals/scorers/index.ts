@@ -3,6 +3,10 @@ import type { ResearchEvalOutput } from "../types";
 import { aggregateClaimCounts, citationFillRate } from "./claims";
 import { aggregateDeadLinkRate } from "./dead-link-rate";
 import { aggregateDomainAdherence } from "./domain-adherence";
+import {
+  factualAccuracy,
+  factualAccuracyScorer,
+} from "./factual-accuracy";
 import { scoreSchemaPass } from "./schema-pass";
 
 export { scoreSchemaPass } from "./schema-pass";
@@ -12,6 +16,16 @@ export {
   domainAdherenceForSection,
   aggregateDomainAdherence,
 } from "./domain-adherence";
+export {
+  aggregateFactualAccuracy,
+  employeeBandContains,
+  factualAccuracy,
+  factualAccuracyScorer,
+  fundingMatches,
+  normalizeCountry,
+  normalizeFundingStage,
+  tickerMatches,
+} from "./factual-accuracy";
 
 export function computeMetrics(output: ResearchEvalOutput) {
   const claims = aggregateClaimCounts(output.sections);
@@ -20,6 +34,7 @@ export function computeMetrics(output: ResearchEvalOutput) {
     citationFillRate: citationFillRate(claims),
     deadLinkRate: aggregateDeadLinkRate(output.sections),
     domainAdherence: aggregateDomainAdherence(output),
+    factualAccuracy: factualAccuracy(output).score,
   };
 }
 
@@ -59,9 +74,14 @@ export const domainAdherenceScorer = createScorer({
   },
 });
 
-export const RESEARCH_SCORERS = [
+export const RESEARCH_QUALITY_SCORERS = [
   schemaPassScorer,
   citationFillRateScorer,
   deadLinkRateScorer,
   domainAdherenceScorer,
+] as const;
+
+export const RESEARCH_SCORERS = [
+  ...RESEARCH_QUALITY_SCORERS,
+  factualAccuracyScorer,
 ] as const;

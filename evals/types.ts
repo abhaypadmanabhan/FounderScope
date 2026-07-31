@@ -96,4 +96,11 @@ export interface ScorerMetrics {
   citationFillRate: number | null;
   deadLinkRate: number | null;
   domainAdherence: number | null;
+  factualAccuracy: number | null;
+}
+
+export interface FactualAccuracyResult {
+  score: number | null;
+  gradedFields: Array<keyof ExpectedFacts>;
+  fieldScores: Partial<Record<keyof ExpectedFacts, boolean>>;
 }

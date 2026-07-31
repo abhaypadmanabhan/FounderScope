@@ -22,14 +22,28 @@ import {
 } from "../evals/scorers/domain-adherence";
 import {
   computeMetrics,
+  RESEARCH_QUALITY_SCORERS,
+  RESEARCH_SCORERS,
   schemaPassScorer,
 } from "../evals/scorers";
+import {
+  aggregateFactualAccuracy,
+  factualAccuracy,
+  factualAccuracyScorer,
+  normalizeCountry,
+  tickerMatches,
+} from "../evals/scorers/factual-accuracy";
 import { scoreSchemaPass, sectionSchemaPasses } from "../evals/scorers/schema-pass";
 import {
   earlyStageFixture,
   enterpriseFixture,
 } from "../evals/fixtures/scorer-fixtures";
 import { SECTIONS } from "@/lib/sections/registry";
+import type {
+  ExpectedFacts,
+  GroundTruth,
+  ResearchEvalOutput,
+} from "../evals/types";
 
 describe("golden set", () => {
   it("has 20 companies split 10 early-stage / 10 enterprise", () => {
@@ -245,11 +259,186 @@ describe("evalite scorer wrappers", () => {
   });
 });
 
+describe("factual-accuracy scorer", () => {
+  const source = {
+    source: "https://example.com/source",
+    asOf: "2026-07-30",
+    tier: "primary" as const,
+  };
+
+  const output: ResearchEvalOutput = {
+    company: {
+      name: "Example",
+      domain: "example.com",
+      maturity: "enterprise",
+    },
+    sections: [
+      {
+        sectionKey: "snapshot",
+        content: {
+          founded_year: 2020,
+          hq: "San Francisco, California",
+          employee_count_band: "51-200",
+        },
+        citations: [],
+      },
+      {
+        sectionKey: "funding",
+        content: {
+          rounds: [
+            {
+              round_type: "Series A",
+              date: "2024-01",
+              amount_usd: 10_000_000,
+              lead_investors: [],
+              all_investors: [],
+              valuation_usd: null,
+            },
+            {
+              round_type: "series-b",
+              date: "2025-02",
+              amount_usd: 52_300_000,
+              lead_investors: [],
+              all_investors: [],
+              valuation_usd: null,
+            },
+          ],
+        },
+        citations: [],
+      },
+    ],
+  };
+
+  function groundTruth(facts: ExpectedFacts): GroundTruth {
+    return { "example.com": facts };
+  }
+
+  it("returns null when the company has no ground-truth entry", () => {
+    expect(factualAccuracy(output, {})).toEqual({
+      score: null,
+      gradedFields: [],
+      fieldScores: {},
+    });
+  });
+
+  it("does not grade expected fields that are absent", () => {
+    const result = factualAccuracy(
+      output,
+      groundTruth({ foundedYear: { value: 2020, ...source } })
+    );
+
+    expect(result.score).toBe(1);
+    expect(result.gradedFields).toEqual(["foundedYear"]);
+    expect(result.fieldScores).toEqual({ foundedYear: true });
+  });
+
+  it("uses the required per-field tolerances", () => {
+    const result = factualAccuracy(
+      output,
+      groundTruth({
+        foundedYear: { value: 2020, ...source },
+        hqCountry: { value: "US", ...source },
+        latestFunding: {
+          value: {
+            stage: "Series B",
+            amountUsd: 50_000_000,
+            announced: "2025-02-01",
+            leadInvestor: null,
+          },
+          ...source,
+        },
+        employees: { value: { min: 75, max: 150 }, ...source },
+      })
+    );
+
+    expect(result).toMatchObject({
+      score: 1,
+      gradedFields: [
+        "foundedYear",
+        "hqCountry",
+        "latestFunding",
+        "employees",
+      ],
+      fieldScores: {
+        foundedYear: true,
+        hqCountry: true,
+        latestFunding: true,
+        employees: true,
+      },
+    });
+  });
+
+  it("normalizes punctuated country aliases inside locations", () => {
+    expect(normalizeCountry("Austin, U.S.")).toBe("US");
+    expect(normalizeCountry("London, U.K.")).toBe("GB");
+  });
+
+  it("requires an exact year and rejects funding outside ten percent", () => {
+    const result = factualAccuracy(
+      output,
+      groundTruth({
+        foundedYear: { value: 2021, ...source },
+        latestFunding: {
+          value: {
+            stage: "Series B",
+            amountUsd: 47_000_000,
+            announced: "2025-02-01",
+            leadInvestor: null,
+          },
+          ...source,
+        },
+      })
+    );
+
+    expect(result.score).toBe(0);
+    expect(result.fieldScores).toEqual({
+      foundedYear: false,
+      latestFunding: false,
+    });
+  });
+
+  it("compares ticker symbols case-insensitively", () => {
+    expect(
+      tickerMatches(
+        { symbol: "nvda", exchange: "NASDAQ" },
+        { symbol: "NVDA", exchange: "NASDAQ" }
+      )
+    ).toBe(true);
+  });
+
+  it("excludes null scores from an aggregate", () => {
+    expect(aggregateFactualAccuracy([null, 1, 0, null])).toBe(0.5);
+    expect(aggregateFactualAccuracy([null, null])).toBeNull();
+  });
+
+  it("returns a null Evalite score for an unmeasured company", async () => {
+    const score = await factualAccuracyScorer({
+      input: output.company,
+      output,
+    });
+
+    expect(score.score).toBeNull();
+  });
+});
+
 describe("eval files are excluded from vitest", () => {
-  it("npm test glob does not match evals/**/*.eval.ts", () => {
-    const configPath = path.resolve(process.cwd(), "vitest.config.ts");
-    const configSource = fs.readFileSync(configPath, "utf-8");
-    expect(configSource).toContain("__tests__/**/*.test.ts");
-    expect(configSource).not.toContain("evals");
+  // Asserts the resolved `include` rather than the file's text. The text version
+  // failed the moment a comment in vitest.config.ts mentioned the evals
+  // directory, which says nothing about whether eval files are collected.
+  it("npm test glob does not match evals/**/*.eval.ts", async () => {
+    const config = (await import("../vitest.config")).default as {
+      test?: { include?: string[] };
+    };
+    const include = config.test?.include ?? [];
+
+    expect(include).toContain("__tests__/**/*.test.ts");
+    expect(
+      include.some((pattern) => pattern.includes("eval")),
+    ).toBe(false);
+  });
+
+  it("registers factual accuracy only in the measured scorer set", () => {
+    expect(RESEARCH_QUALITY_SCORERS).not.toContain(factualAccuracyScorer);
+    expect(RESEARCH_SCORERS).toContain(factualAccuracyScorer);
   });
 });
