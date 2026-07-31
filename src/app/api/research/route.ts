@@ -121,7 +121,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const company = await findOrCreateCompany(body.name, body.domain ?? null);
+  // Created before the company row, not with the section tasks, because the
+  // insert can itself spend an EXA call on the logo lookup. Declared later, that
+  // call had nowhere to be counted and simply disappeared from exa_usage.
+  const totals: RequestTotals = {
+    usage: createSearchUsage(),
+    totalClaims: 0,
+    citedClaims: 0,
+  };
+
+  const company = await findOrCreateCompany(
+    body.name,
+    body.domain ?? null,
+    totals.usage,
+  );
 
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -204,12 +217,6 @@ export async function POST(request: Request) {
           domain: disambig.canonical_domain,
           slug: company.slug,
           one_line_description: disambig.one_line_description,
-        };
-
-        const totals: RequestTotals = {
-          usage: createSearchUsage(),
-          totalClaims: 0,
-          citedClaims: 0,
         };
 
         const tasks = SECTIONS.map((section) =>

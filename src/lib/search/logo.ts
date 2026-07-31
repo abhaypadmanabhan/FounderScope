@@ -42,6 +42,11 @@ function faviconFor(domain: string): string | null {
   // the URL too — a stored beacon that leaks every later viewer's IP and
   // User-Agent to a host of the attacker's choosing.
   if (!HOSTNAME.test(host) || host.length > 253) return null;
+  // `.localhost` is special-use (RFC 6761): browsers resolve it to loopback, so
+  // `beacon.localhost` clears every syntax check above and still turns a stored
+  // logo into a GET against the *viewer's* own machine. Bare `localhost` is
+  // already rejected by HOSTNAME (no dot); the subdomain form is not.
+  if (host === "localhost" || host.endsWith(".localhost")) return null;
   return `https://${host}/favicon.ico`;
 }
 

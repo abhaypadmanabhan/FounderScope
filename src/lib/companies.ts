@@ -1,8 +1,8 @@
 // Company row resolution: find existing by slug, otherwise insert with collision handling.
 import { supabaseAdmin as supabase } from "./supabase/admin";
 import { resolveCollisionSlug, slugify } from "./slug";
-import { createSearchBudget, createSearchUsage } from "./search";
 import { findCompanyLogo } from "./search/logo";
+import type { SearchUsage } from "./search/types";
 
 export type CompanyRow = {
   id: string;
@@ -23,9 +23,15 @@ export async function getCompanyBySlug(slug: string): Promise<CompanyRow | null>
   return (data ?? null) as CompanyRow | null;
 }
 
+/**
+ * `usage` is the caller's request-scoped counter. Passing it is what makes the
+ * one EXA call an insert can make (the logo lookup) show up in the request's
+ * reported totals instead of vanishing.
+ */
 export async function findOrCreateCompany(
   name: string,
-  domain: string | null
+  domain: string | null,
+  usage?: SearchUsage
 ): Promise<CompanyRow> {
   const baseSlug = slugify(name);
 
@@ -38,23 +44,24 @@ export async function findOrCreateCompany(
       const altSlug = resolveCollisionSlug(name, domain);
       const altExisting = await getCompanyBySlug(altSlug);
       if (altExisting) return altExisting;
-      return await insertCompany(altSlug, name, domain);
+      return await insertCompany(altSlug, name, domain, usage);
     }
     return existing;
   }
 
-  return await insertCompany(baseSlug, name, domain);
+  return await insertCompany(baseSlug, name, domain, usage);
 }
 
 async function insertCompany(
   slug: string,
   displayName: string,
-  domain: string | null
+  domain: string | null,
+  usage?: SearchUsage
 ): Promise<CompanyRow> {
   const tokens = [slug, displayName.toLowerCase()];
   if (domain) tokens.push(domain.toLowerCase());
 
-  const logoUrl = await fetchLogoSilently(displayName, domain);
+  const logoUrl = await fetchLogoSilently(displayName, domain, usage);
 
   const { data, error } = await supabase
     .from("companies")
@@ -78,6 +85,7 @@ async function insertCompany(
 async function fetchLogoSilently(
   name: string,
   domain: string | null,
+  usage?: SearchUsage,
 ): Promise<string | null> {
   const providerId = process.env.SEARCH_PROVIDER ?? "exa";
   // Only EXA's key is forwarded, because only EXA can return a real logo image.
@@ -86,14 +94,14 @@ async function fetchLogoSilently(
   const exaApiKey = providerId === "exa" ? process.env.EXA_API_KEY : null;
 
   try {
-    return await findCompanyLogo(
-      { name, domain },
-      {
-        exaApiKey,
-        budget: createSearchBudget("default"),
-        usage: createSearchUsage(),
-      },
-    );
+    // No budget: budgets are per model call (createSearchBudget lives inside
+    // runResearchCall), so there is no request-scoped one to debit here. Minting
+    // a fresh 8-slot budget per insert was accounting theatre — it could never
+    // be exhausted and its counters were discarded on return, which is exactly
+    // what findCompanyLogo's contract says not to do. The caller's `usage` is
+    // real and is threaded through; the missing spend cap is tracked in
+    // tasks/todo.md rather than faked here.
+    return await findCompanyLogo({ name, domain }, { exaApiKey, usage });
   } catch {
     return null;
   }

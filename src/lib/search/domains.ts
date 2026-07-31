@@ -76,10 +76,47 @@ export function isLegalIncludeDomain(entry: string): boolean {
   return entry.length > 0 && !entry.startsWith("/") && !entry.endsWith(".");
 }
 
+/**
+ * A bare hostname, or null.
+ *
+ * `canonical_domain` is only *asked* to omit protocol, path and www — the ask
+ * lives in an LLM prompt, so it is a request, not a guarantee. A plain trim let
+ * `https://stripe.com` and `example.com/investors` through, and both are legal
+ * by `isLegalIncludeDomain` while expanding into filters EXA rejects outright:
+ * `*.https://stripe.com`, `example.com/investors/investors`. Parse instead of
+ * trusting, so only a hostname can ever reach an interpolated entry.
+ */
 function normalizeCompanyDomain(domain: string | null | undefined): string | null {
   const trimmed = domain?.trim().toLowerCase() ?? "";
   if (trimmed.length === 0) return null;
-  return trimmed.replace(/^www\./, "");
+
+  const scheme = /^([a-z][a-z0-9+.-]*):\/\//.exec(trimmed);
+  // Not web traffic, not a company domain. Dropping `ftp://` or `javascript:`
+  // beats digging a plausible-looking hostname out of it.
+  if (scheme && scheme[1] !== "http" && scheme[1] !== "https") return null;
+
+  let url: URL;
+  try {
+    url = new URL(scheme ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+  // `mailto:a@b.tld` has no `://`, so it reaches URL() as
+  // `https://mailto:a@b.tld` and parses with credentials. Rejecting those is
+  // what keeps it from silently normalizing to `b.tld`.
+  if (url.username || url.password) return null;
+
+  const host = url.hostname.replace(/^www\./, "");
+  // URL() has already discarded path, query, port and credentials. What is left
+  // to reject is what is syntactically a host but useless as an allowlist entry:
+  // IP literals, bracketed IPv6, and single-label names. Same shape as the check
+  // in logo.ts, but a different job — that one guards a rendered <img src>,
+  // this one guards an EXA filter value.
+  return /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*\.[a-z]{2,63}$/.test(
+    host,
+  )
+    ? host
+    : null;
 }
 
 function companyEnterpriseDomains(domain: string): readonly string[] {

@@ -87,3 +87,8 @@ looks for them deliberately.
 - `fs:<user-id>:` key parsing assumes a colon-free user id (true for Supabase UUIDs).
 - Host allowlist matching can false-positive on `foo.investors.com`.
 - **Phase C1 not started** — per-section `includeDomains` grounding + first eval run.
+- `findCompanyLogo`'s EXA call has no spend cap. Budgets are created per model
+  call (`createSearchBudget` inside `runResearchCall`), so a company insert —
+  which happens outside any model call — has none to debit. The call is now
+  counted in the request's `exa_usage`, but nothing caps it. A request-scoped
+  budget that per-call budgets draw from is the real fix.

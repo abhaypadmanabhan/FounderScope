@@ -189,6 +189,9 @@ describe("faviconFor host validation", () => {
     "beacon.attacker.tld:8080",
     "10.0.0.5",
     "localhost",
+    // `.localhost` resolves to loopback in browsers — a stored logo pointing at
+    // it is a GET against the viewer's own machine, not the company's server.
+    "beacon.localhost",
     "evil.tld/path",
     "has space.tld",
     "-leading-hyphen.tld",
