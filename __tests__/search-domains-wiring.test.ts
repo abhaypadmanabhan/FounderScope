@@ -1,15 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 const readCacheMock = vi.fn<(key: string) => Promise<unknown>>();
-const writeCacheMock = vi.fn(
-  async (
-    _key: string,
-    _query: string,
-    _results: unknown,
-    _ttlDays?: number,
-  ) => undefined,
-);
+const writeCacheMock = vi.fn<
+  (
+    key: string,
+    query: string,
+    results: unknown,
+    ttlDays?: number,
+  ) => Promise<void>
+>(async () => undefined);
 
 vi.mock("@/lib/search/cache", () => ({
   cacheKeyFor: () => "cache-key",
@@ -161,8 +161,56 @@ describe("allowlistForSection", () => {
     ]);
   });
 
+  // canonical_domain is produced by an LLM told to omit protocol/path/www. That
+  // is a request, not a guarantee, and a raw value interpolates into filters EXA
+  // rejects — `*.https://stripe.com`, `stripe.com/investors/investors`.
+  it.each([
+    "https://stripe.com",
+    "http://stripe.com",
+    "https://www.stripe.com",
+    "stripe.com/investors",
+    "https://stripe.com/investors?utm=x",
+    "https://stripe.com:8443/path?q=1",
+    "  HTTPS://Stripe.com/  ",
+  ])("reduces %j to the bare hostname", (canonicalDomain) => {
+    expect(allowlistForSection("funding", "enterprise", canonicalDomain)).toEqual([
+      ...ENTERPRISE_DOMAINS,
+      "stripe.com/investors",
+      "stripe.com/investor",
+      "*.stripe.com",
+    ]);
+  });
+
+  it.each([
+    "mailto:john@example.com",
+    "ftp://example.com",
+    "javascript:alert(1)",
+    "user:pass@example.com",
+    "10.0.0.5",
+    "localhost",
+    "[::1]",
+    "not a domain",
+    "/investors",
+    "   ",
+  ])("drops unusable canonical domain %j rather than interpolating it", (
+    canonicalDomain,
+  ) => {
+    expect(allowlistForSection("funding", "enterprise", canonicalDomain)).toEqual(
+      ENTERPRISE_DOMAINS,
+    );
+  });
+
   it("produces only EXA-legal includeDomains for every section, maturity, and domain", () => {
-    const domains = ["stripe.com", "acme.io", null] as const;
+    const domains = [
+      "stripe.com",
+      "acme.io",
+      "https://stripe.com",
+      "stripe.com/investors",
+      "mailto:john@example.com",
+      "10.0.0.5",
+      "not a domain",
+      null,
+    ] as const;
     const maturities = ["early-stage", "enterprise"] as const;
     for (const section of SECTIONS) {
       for (const maturity of maturities) {

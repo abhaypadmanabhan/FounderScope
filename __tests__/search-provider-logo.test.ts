@@ -153,10 +153,60 @@ describe("findCompanyLogo", () => {
 
     const logo = await findCompanyLogo(
       { name: "Acme", domain: "acme.example" },
+      { exaApiKey: "exa-test", budget: createSearchBudget("logo") },
+    );
+
+    expect(logo).toBe("https://acme.example/favicon.ico");
+  });
+
+  it("makes no network call when a key is supplied without a budget", async () => {
+    // A key is not authorization to spend. Without a budget the caller owns,
+    // the paid branch must fail closed — otherwise every future caller that
+    // forgets the budget silently buys an uncapped EXA call.
+    const fetchSpy = vi.fn(async () => new Response("{}", { status: 200 }));
+    global.fetch = fetchSpy;
+
+    const logo = await findCompanyLogo(
+      { name: "Acme", domain: "acme.example" },
       { exaApiKey: "exa-test" },
     );
 
     expect(logo).toBe("https://acme.example/favicon.ico");
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("buys at most one logo per request-owned logo budget", async () => {
+    const fetchSpy = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            results: [{ extras: { imageLinks: ["https://cdn.acme.example/logo.png"] } }],
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        ),
+    );
+    global.fetch = fetchSpy;
+
+    // One budget, two lookups — the shape a request would have if the insert
+    // path ever ran twice. The `logo` tier's ceiling of 1 is what makes the
+    // second one free instead of paid.
+    const budget = createSearchBudget("logo");
+    const usage = createSearchUsage();
+
+    const first = await findCompanyLogo(
+      { name: "Acme", domain: "acme.example" },
+      { exaApiKey: "exa-test", budget, usage },
+    );
+    const second = await findCompanyLogo(
+      { name: "Acme", domain: "acme.example" },
+      { exaApiKey: "exa-test", budget, usage },
+    );
+
+    expect(first).toBe("https://cdn.acme.example/logo.png");
+    expect(second).toBe("https://acme.example/favicon.ico");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(budget.used).toBe(SEARCH_BUDGET.logo);
+    expect(usage.calls).toBe(1);
   });
 
   it("still yields a favicon when the search budget is exhausted", async () => {
@@ -189,6 +239,9 @@ describe("faviconFor host validation", () => {
     "beacon.attacker.tld:8080",
     "10.0.0.5",
     "localhost",
+    // `.localhost` resolves to loopback in browsers — a stored logo pointing at
+    // it is a GET against the viewer's own machine, not the company's server.
+    "beacon.localhost",
     "evil.tld/path",
     "has space.tld",
     "-leading-hyphen.tld",

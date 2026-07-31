@@ -30,7 +30,13 @@ export interface SearchProvider {
 }
 
 export interface SearchBudget {
-  readonly tier: "default" | "reasoning";
+  /**
+   * `default` and `reasoning` mirror `ModelTier` and are created per model call.
+   * `logo` is the one budget that is request-scoped rather than call-scoped: the
+   * company-insert logo lookup runs outside any model call, so it has no
+   * call-scoped budget to draw from and needs its own owner.
+   */
+  readonly tier: "default" | "reasoning" | "logo";
   used: number;
 }
 

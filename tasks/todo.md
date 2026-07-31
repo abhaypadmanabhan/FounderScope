@@ -176,6 +176,11 @@ merged path; all are recorded so the next person does not rediscover them.
   degrades to no filter for those providers. Unverified against live APIs.
 - Vitest is pinned at 2.1.9, which caps evalite at 0.12.0. Upgrading to vitest 4
   would unlock current evalite but moves the gate all 299 tests run through.
+- Section search budgets are still per model call, so nothing caps EXA spend
+  across a whole request: six default-tier sections at 8 plus moat at the
+  reasoning tier's 10, so up to 58 searches, plus the 1 the `logo` tier now
+  allows. A request-scoped pool that per-call budgets draw from is the real fix;
+  the `logo` tier is the first budget shaped that way.
 
 ### Closed by the 2026-07-30 patch
 
