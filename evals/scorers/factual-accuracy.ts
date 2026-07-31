@@ -232,6 +232,13 @@ function normalizedWords(value: string): string {
     .trim();
 }
 
+const NORMALIZED_COUNTRY_ALIASES = Object.fromEntries(
+  Object.entries(COUNTRY_ALIASES).map(([alias, code]) => [
+    normalizedWords(alias),
+    code,
+  ])
+);
+
 function isoCountryNames(): Map<string, string> {
   if (countryNames) return countryNames;
 
@@ -259,7 +266,7 @@ export function normalizeCountry(value: string): string | null {
     );
     if (displayName && displayName !== possibleCode) return possibleCode;
   }
-  const directAlias = COUNTRY_ALIASES[trimmed.toUpperCase()];
+  const directAlias = NORMALIZED_COUNTRY_ALIASES[normalizedWords(trimmed)];
   if (directAlias) return directAlias;
 
   const normalized = normalizedWords(trimmed);
@@ -272,7 +279,7 @@ export function normalizeCountry(value: string): string | null {
     .filter(Boolean);
   for (let index = segments.length - 1; index >= 0; index--) {
     const segment = segments[index];
-    const alias = COUNTRY_ALIASES[segment];
+    const alias = NORMALIZED_COUNTRY_ALIASES[segment];
     if (alias) return alias;
     if (US_STATE_NAMES.has(segment) || US_STATE_CODES.has(segment)) return "US";
     const country = isoCountryNames().get(segment);

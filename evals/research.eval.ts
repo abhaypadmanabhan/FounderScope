@@ -11,7 +11,16 @@ import {
   ENTERPRISE_COMPANIES,
   GOLDEN_SET,
 } from "./golden-set";
-import { RESEARCH_SCORERS, factualAccuracy } from "./scorers";
+import { GROUND_TRUTH } from "./ground-truth";
+import {
+  limitEvalRows,
+  partitionEvalRowsByGroundTruth,
+} from "./limit";
+import {
+  RESEARCH_QUALITY_SCORERS,
+  RESEARCH_SCORERS,
+  factualAccuracy,
+} from "./scorers";
 import type { GoldenCompany, ResearchEvalOutput } from "./types";
 
 /**
@@ -168,31 +177,13 @@ export async function runResearchEval(
  * end-to-end should cost two companies, not twenty. Unset means the whole set,
  * which is the right default offline where rows are free.
  */
-function limitRows(companies: GoldenCompany[]): GoldenCompany[] {
-  const raw = process.env.FOUNDER_SCOPE_EVAL_LIMIT?.trim();
-  if (!raw) return companies;
-  const limit = Number.parseInt(raw, 10);
-  if (!Number.isInteger(limit) || limit <= 0) {
-    throw new Error(
-      `FOUNDER_SCOPE_EVAL_LIMIT must be a positive integer, got "${raw}".`
-    );
-  }
-  return companies.slice(0, limit);
-}
-
 /**
  * Columns shared by both suites.
  *
- * `graded` exists because evalite cannot represent an unmeasured score. Its own
- * types say "null scores will be reported as 0" and its storage layer does
- * `score.score ?? 0`, so a company with no ground truth is displayed
- * indistinguishably from one the product got wrong. That would invert the whole
- * point of making every ExpectedFacts field optional. Printing the number of
- * graded fields next to the score disambiguates it: 0 with `graded 0` means
- * nothing was measured, 0 with `graded 3` means three facts were wrong.
- *
- * The authoritative aggregate is `aggregateFactualAccuracy`, which excludes
- * nulls rather than sinking them to zero.
+ * `graded` makes factual coverage visible. Evalite 0.12 stores null scores as
+ * zero, so rows are partitioned below: measured rows receive every scorer,
+ * while unmeasured rows receive only the quality scorers. That keeps absent
+ * ground truth out of both row scores and aggregate factual accuracy.
  */
 function researchColumns({ output }: { output: unknown }) {
   const result = output as ResearchEvalOutput;
@@ -203,20 +194,37 @@ function researchColumns({ output }: { output: unknown }) {
   ];
 }
 
-evalite("research — early-stage golden set", {
-  // 0.12.0 takes a function here, not an array.
-  data: () => limitRows(EARLY_STAGE_COMPANIES).map((company) => ({ input: company })),
-  task: async (company) => runResearchEval(company),
-  scorers: [...RESEARCH_SCORERS],
-  columns: researchColumns,
-});
+function registerResearchSuites(
+  label: string,
+  companies: GoldenCompany[]
+): void {
+  const limited = limitEvalRows(
+    companies,
+    process.env.FOUNDER_SCOPE_EVAL_LIMIT
+  );
+  const data = partitionEvalRowsByGroundTruth(limited, GROUND_TRUTH);
 
-evalite("research — enterprise golden set", {
-  data: () => limitRows(ENTERPRISE_COMPANIES).map((company) => ({ input: company })),
-  task: async (company) => runResearchEval(company),
-  scorers: [...RESEARCH_SCORERS],
-  columns: researchColumns,
-});
+  if (data.measured.length > 0) {
+    evalite(`research — ${label} — measured`, {
+      data: () => data.measured.map((company) => ({ input: company })),
+      task: async (company) => runResearchEval(company),
+      scorers: [...RESEARCH_SCORERS],
+      columns: researchColumns,
+    });
+  }
+
+  if (data.unmeasured.length > 0) {
+    evalite(`research — ${label} — unmeasured`, {
+      data: () => data.unmeasured.map((company) => ({ input: company })),
+      task: async (company) => runResearchEval(company),
+      scorers: [...RESEARCH_QUALITY_SCORERS],
+      columns: researchColumns,
+    });
+  }
+}
+
+registerResearchSuites("early-stage golden set", EARLY_STAGE_COMPANIES);
+registerResearchSuites("enterprise golden set", ENTERPRISE_COMPANIES);
 
 // Sanity export so the golden set is referenced at module load (lint-friendly).
 export const GOLDEN_SET_SIZE = GOLDEN_SET.length;

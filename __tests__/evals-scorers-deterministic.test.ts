@@ -22,12 +22,15 @@ import {
 } from "../evals/scorers/domain-adherence";
 import {
   computeMetrics,
+  RESEARCH_QUALITY_SCORERS,
+  RESEARCH_SCORERS,
   schemaPassScorer,
 } from "../evals/scorers";
 import {
   aggregateFactualAccuracy,
   factualAccuracy,
   factualAccuracyScorer,
+  normalizeCountry,
   tickerMatches,
 } from "../evals/scorers/factual-accuracy";
 import { scoreSchemaPass, sectionSchemaPasses } from "../evals/scorers/schema-pass";
@@ -365,6 +368,11 @@ describe("factual-accuracy scorer", () => {
     });
   });
 
+  it("normalizes punctuated country aliases inside locations", () => {
+    expect(normalizeCountry("Austin, U.S.")).toBe("US");
+    expect(normalizeCountry("London, U.K.")).toBe("GB");
+  });
+
   it("requires an exact year and rejects funding outside ten percent", () => {
     const result = factualAccuracy(
       output,
@@ -427,5 +435,10 @@ describe("eval files are excluded from vitest", () => {
     expect(
       include.some((pattern) => pattern.includes("eval")),
     ).toBe(false);
+  });
+
+  it("registers factual accuracy only in the measured scorer set", () => {
+    expect(RESEARCH_QUALITY_SCORERS).not.toContain(factualAccuracyScorer);
+    expect(RESEARCH_SCORERS).toContain(factualAccuracyScorer);
   });
 });

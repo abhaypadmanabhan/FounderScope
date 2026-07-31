@@ -74,10 +74,14 @@ export const domainAdherenceScorer = createScorer({
   },
 });
 
-export const RESEARCH_SCORERS = [
+export const RESEARCH_QUALITY_SCORERS = [
   schemaPassScorer,
   citationFillRateScorer,
   deadLinkRateScorer,
   domainAdherenceScorer,
+] as const;
+
+export const RESEARCH_SCORERS = [
+  ...RESEARCH_QUALITY_SCORERS,
   factualAccuracyScorer,
 ] as const;

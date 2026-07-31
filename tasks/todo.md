@@ -91,7 +91,8 @@ and a manual code-review pass whose 2 HIGH + 2 MEDIUM findings were applied.
 ## Patch 2026-07-30 — C1 grounding + eval harness (4 agents, run `20260730-0844-b0`)
 
 Brief: `tasks/patch-bibles/2026-07-30.md`. All four merged to `dev`.
-299 tests / 36 files green, `tsc --noEmit` clean.
+At that patch-merge checkpoint, 299 tests / 36 files passed and
+`tsc --noEmit` was clean.
 
 - [x] **C1 grounding.** `src/lib/search/domains.ts` supplies per-section
       `includeDomains`, threaded through `RunArgs` into the `web_search` tool so
